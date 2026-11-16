@@ -1,5 +1,5 @@
 /**
- * Panel entry point: the brand header (logo + tabs) and four views. Every render comes from the
+ * Panel entry point: the brand header (logo + tabs) and five views. Every render comes from the
  * `TrackerState` pushed by Rust on `tracker://state`.
  *
  * Language: `navigator.languages` until Rust sends the OS's languages and
@@ -32,6 +32,7 @@ import {
   type MessageKey,
 } from "./i18n/i18n";
 import { AboutView } from "./views/about";
+import { AgentsView } from "./views/agents";
 import { DashboardView } from "./views/dashboard";
 import { HistoryView } from "./views/history";
 import { SettingsView } from "./views/settings";
@@ -41,12 +42,14 @@ setLocale(detectLocale());
 
 const dashboard = new DashboardView();
 const history = new HistoryView();
+const agents = new AgentsView();
 const settings = new SettingsView();
 const about = new AboutView();
 
 const views: Record<View, { label: MessageKey; root: HTMLElement }> = {
   dashboard: { label: "tab.dashboard", root: dashboard.root },
   history: { label: "tab.history", root: history.root },
+  agents: { label: "tab.agents", root: agents.root },
   settings: { label: "tab.settings", root: settings.root },
   about: { label: "tab.about", root: about.root },
 };
@@ -65,6 +68,7 @@ const main = h(
   { class: "content" },
   dashboard.root,
   history.root,
+  agents.root,
   settings.root,
   about.root,
 );
@@ -90,6 +94,8 @@ function select(view: View): void {
   }
   if (view === "settings") void settings.load();
   if (view === "history") void history.load();
+  // `af` is only run while its view is on screen.
+  agents.setActive(view === "agents");
   main.scrollTop = 0;
 }
 
@@ -116,6 +122,7 @@ onLocaleChanged(() => {
   if (lastSettings) dashboard.setSettings(lastSettings);
   if (lastState) render(lastState);
   history.relocalize();
+  agents.relocalize();
   settings.relocalize();
 });
 

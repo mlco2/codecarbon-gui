@@ -282,10 +282,114 @@ export interface HistoryPayload {
   path: string;
 }
 
-/** Views of the panel; also the payload of the `app://navigate` event. */
-export type View = "dashboard" | "history" | "settings" | "about";
+// --- Coding agents, read from the `af` CLI (af.rs, docs/AF.md) ----------------
 
-const VIEWS: readonly string[] = ["dashboard", "history", "settings", "about"];
+/**
+ * What running `af` gave. Everything but "ok" is explained to the user
+ * (agents.ts); "not_found" is a normal state, not an error.
+ */
+export type AfOutcome<T> =
+  | { outcome: "ok"; data: T }
+  | { outcome: "not_found" }
+  | { outcome: "spawn_failed"; detail: string }
+  | { outcome: "timed_out"; seconds: number }
+  | { outcome: "failed"; exit_code: number | null; detail: string }
+  | { outcome: "invalid_output"; detail: string }
+  | { outcome: "unsupported_protocol"; found: number | null; supported: number };
+
+export interface AfAgentStatus {
+  /** "claude-code", "codex", … */
+  id: string;
+  name: string;
+  /**
+   * "receiving", "needs_restart", "waiting", "misconfigured",
+   * "not_configured", "not_installed", "unknown" (or a state added since).
+   */
+  state: string;
+  /** In `af`'s words (English). */
+  detail: string | null;
+  action: string | null;
+}
+
+/** `af status`, the fields the panel uses. */
+export interface AfStatus {
+  af_version: string;
+  /** `af self update` manages this binary (a release install). */
+  self_update: { managed: boolean };
+  service: { supported: boolean; installed: boolean };
+  receiver: { endpoint: string; reachable: boolean; note: string | null };
+  /** `running` is null where it cannot be asked. */
+  collector: { running: boolean | null };
+  agents: AfAgentStatus[];
+}
+
+/** Measured: as reported by the agents. */
+export interface AfTokens {
+  input: number;
+  output: number;
+  thought: number;
+  cache_read: number;
+  cache_write: number;
+  total: number;
+}
+
+/** A modelled impact: always a range. */
+export interface AfImpact {
+  unit: string;
+  total: { min: number; max: number };
+}
+
+export interface AfFigures {
+  calls: number;
+  sessions: number;
+  tokens: AfTokens;
+  /** Calls whose impacts are in `remote`. */
+  estimated_calls: number;
+  unestimated_calls: number;
+  unestimated_by_reason: Record<string, number>;
+  /**
+   * Modelled impacts of the remote inference, summed over
+   * `estimated_calls` only. Keys: energy (kWh), gwp (kgCO2eq), water, adpe, pe.
+   */
+  remote: Record<string, AfImpact>;
+}
+
+export interface AfNotEstimated {
+  agent: string;
+  model: string;
+  /** The estimator's status, e.g. "unknown_model". */
+  reason: string;
+  calls: number;
+  tokens: number;
+}
+
+export type AfPeriod = "today" | "7d" | "30d";
+
+/** `af summary` (schemas/summary/v1.schema.json in agentic-footprint). */
+export interface AfSummary {
+  af_version: string;
+  generated_at: string;
+  period: { name: string; from: string; to: string; utc_offset_minutes: number };
+  collector: { running: boolean | null; last_event_at: string | null };
+  totals: AfFigures;
+  /** Largest token total first. */
+  by_agent: (AfFigures & { agent: string; name: string })[];
+  by_model: (AfFigures & { agent: string; model: string })[];
+  /** Counted in the tokens, in no `remote` sum. */
+  models_not_estimated: AfNotEstimated[];
+  /** Every local day of the period ("YYYY-MM-DD"), oldest first. */
+  by_day: (AfFigures & { date: string })[];
+}
+
+/** What an action printed. */
+export interface AfActionOutput {
+  output: string;
+}
+
+/** Views of the panel; also the payload of the `app://navigate` event. */
+export type View = "dashboard" | "history" | "agents" | "settings" | "about";
+
+const VIEWS: readonly string[] = ["dashboard", "history", "agents", "settings", "about"];
 
 /** Narrow an `app://navigate` payload to a view name. */
 export function isView(name: unknown): name is View {
@@ -337,6 +441,26 @@ export const accountSelectExperiment = (
   experimentId: string,
 ): Promise<void> =>
   invoke("account_select_experiment", { organizationId, projectId, experimentId });
+
+/** `af status`. Read-only. */
+export const afStatus = (): Promise<AfOutcome<AfStatus>> =>
+  invoke<AfOutcome<AfStatus>>("af_status");
+/** `af summary`; days are cut at `utcOffsetMinutes` east of UTC. Read-only. */
+export const afSummary = (
+  period: AfPeriod,
+  utcOffsetMinutes: number,
+): Promise<AfOutcome<AfSummary>> =>
+  invoke<AfOutcome<AfSummary>>("af_summary", { period, utcOffsetMinutes });
+// The three below change the user's machine: call them from a click only.
+/** `af service install`. */
+export const afInstallService = (): Promise<AfOutcome<AfActionOutput>> =>
+  invoke<AfOutcome<AfActionOutput>>("af_install_service");
+/** `af setup --yes --global`: edits the agents' own configuration files. */
+export const afSetupAgents = (): Promise<AfOutcome<AfActionOutput>> =>
+  invoke<AfOutcome<AfActionOutput>>("af_setup_agents");
+/** `af self update`: `af` downloads and verifies its own release. */
+export const afSelfUpdate = (): Promise<AfOutcome<AfActionOutput>> =>
+  invoke<AfOutcome<AfActionOutput>>("af_self_update");
 
 /** Called with the full state after every change on the Rust side. */
 export function onState(callback: (state: TrackerState) => void): Promise<UnlistenFn> {
