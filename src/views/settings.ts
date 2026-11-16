@@ -3,14 +3,20 @@
  * again and is authoritative; the checks here only give instant feedback.
  */
 import {
+  afSelfUpdate,
+  afStatus,
   errorMessage,
   getSettings,
   saveSettings,
+  type AfActionOutput,
+  type AfOutcome,
+  type AfStatus,
   type ApiSettings,
   type Settings,
   type TrackerState,
 } from "../api";
-import { h, show } from "../dom";
+import { afUpdateRow, problem, problemText, settled } from "../agents";
+import { h, setText, show, spinner } from "../dom";
 import {
   live,
   liveAttr,
@@ -115,6 +121,74 @@ function optionalText(input: HTMLInputElement): string | null {
   return v === "" ? null : v;
 }
 
+/**
+ * Settings → Updates: the version of `af` (the CLI behind the Agents view)
+ * and "Update af", which runs `af self update` on a click. Enabled only
+ * when `af` says it manages its own install; hidden until `af` answered.
+ */
+class AfRow {
+  readonly root = h("div", { class: "af-row", hidden: true });
+  private status: AfOutcome<AfStatus> | null = null;
+  private updating = false;
+  private result: AfOutcome<AfActionOutput> | null = null;
+  private readonly line = h("span", {});
+  private readonly button = h("button", { class: "btn btn-small", type: "button" });
+  private readonly note = h("p", { class: "muted small" });
+  private readonly message = h("p", { class: "form-message", role: "status" });
+
+  constructor() {
+    this.button.addEventListener("click", () => void this.update());
+    this.root.append(
+      h("div", { class: "af-row-head" }, this.line, this.button),
+      this.note,
+      this.message,
+    );
+  }
+
+  /** Settings was opened: ask `af status` (read-only). */
+  async load(): Promise<void> {
+    this.result = null;
+    this.status = await settled(afStatus());
+    this.render();
+  }
+
+  render(): void {
+    if (!this.status) return;
+    const row = afUpdateRow(this.status);
+    show(this.root, true);
+    setText(this.line, row.line);
+    show(this.button, row.showButton);
+    this.button.disabled = !row.canUpdate || this.updating;
+    this.button.replaceChildren(...(this.updating ? [spinner()] : []), t("settings.af_update"));
+    setText(this.note, row.note ?? "");
+    show(this.note, row.note !== null);
+    const failed = this.result ? problem(this.result) : null;
+    setText(
+      this.message,
+      this.updating
+        ? t("agents.action_running")
+        : failed
+          ? problemText(failed)
+          : this.result
+            ? t("agents.action_done")
+            : "",
+    );
+    this.message.classList.toggle("error", failed !== null);
+  }
+
+  private async update(): Promise<void> {
+    if (this.updating) return;
+    this.updating = true;
+    this.result = null;
+    this.render();
+    this.result = await settled(afSelfUpdate());
+    this.updating = false;
+    // The version may have changed.
+    this.status = await settled(afStatus());
+    this.render();
+  }
+}
+
 export class SettingsView {
   readonly root: HTMLElement;
   private loaded: Settings | null = null;
@@ -199,6 +273,7 @@ export class SettingsView {
     { class: "muted small", hidden: true },
     live("settings.updates_not_configured"),
   );
+  private readonly af = new AfRow();
 
   constructor() {
     const f = this.fields;
@@ -245,6 +320,7 @@ export class SettingsView {
         h("legend", { class: "card-title" }, live("settings.updates")),
         f.check_updates.row,
         this.updatesUnavailable,
+        this.af.root,
       ),
       h(
         "fieldset",
@@ -313,6 +389,7 @@ export class SettingsView {
     }
     this.setMessage(this.messageText, this.message.classList.contains("error"));
     this.account.relocalize();
+    this.af.render();
   }
 
   /** The Language select: applied to the panel at once, then saved (Rust relabels the tray). */
@@ -344,6 +421,7 @@ export class SettingsView {
 
   /** Reload from disk every time the view is shown. */
   async load(): Promise<void> {
+    void this.af.load();
     try {
       this.loaded = await getSettings();
       this.write(this.loaded);

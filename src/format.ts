@@ -14,7 +14,7 @@ const DASH = "–";
 const NBSP = "\u00a0";
 
 /** "23.4" + "W": a plain space in English, a non-breaking one in French. */
-function withUnit(value: string, unit: string, locale: string): string {
+export function withUnit(value: string, unit: string, locale: string): string {
   return `${value}${/^fr\b/i.test(locale) ? NBSP : " "}${unit}`;
 }
 
