@@ -14,7 +14,9 @@
 //! * [`i18n`]       – tray / menu / notification strings in English and French
 //! * [`error`]      – errors sent to the panel as translatable codes
 //! * [`updater`]    – update checks and installs (GitHub Releases, signed)
+//! * [`af`]         – coding-agent usage read from the `af` CLI (Agents view)
 
+pub mod af;
 pub mod agent;
 pub mod commands;
 pub mod controller;
@@ -144,6 +146,11 @@ pub fn run() {
             commands::account_select_experiment,
             commands::check_for_updates,
             commands::install_update,
+            commands::af_status,
+            commands::af_summary,
+            commands::af_install_service,
+            commands::af_setup_agents,
+            commands::af_self_update,
         ])
         .setup(move |app| {
             setup(app, updates_configured)?;
