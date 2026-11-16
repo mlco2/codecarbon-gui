@@ -12,6 +12,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   afInstallService,
   afSetupAgents,
+  afSetupPython,
   afStatus,
   afSummary,
   errorMessage,
@@ -62,10 +63,11 @@ const CHART_W = 300;
 const BARS_H = 72;
 const TICKS_H = 16;
 
-type ActionName = "service" | "setup";
+type ActionName = "service" | "setup" | "python";
 const ACTIONS: Record<ActionName, () => Promise<AfOutcome<AfActionOutput>>> = {
   service: afInstallService,
   setup: afSetupAgents,
+  python: afSetupPython,
 };
 
 /** The panel window is on screen (it is hidden, not closed, when dismissed). */
@@ -308,7 +310,36 @@ export class AgentsView {
       setup.offerSetup
         ? this.actionButton("setup", "agents.setup_agents", "agents.setup_agents_hint")
         : null,
+      setup.estimates === "setup"
+        ? h(
+            "div",
+            {},
+            h("p", {}, t("agents.estimates_missing")),
+            this.actionButton("python", "agents.setup_python", "agents.setup_python_hint"),
+          )
+        : null,
+      setup.estimates === "need_uv" ? this.needUv(setup.uvUrl) : null,
       this.actionResult(),
+    );
+  }
+
+  /** No uv and no Python: where to get uv, which brings Python with it. */
+  private needUv(url: string): HTMLElement {
+    const message = h("p", { class: "form-message error", role: "status" });
+    const link = h("a", { href: url, class: "link" }, t("agents.install_uv"));
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      openUrl(url).catch((err: unknown) => setText(message, errorMessage(err)));
+    });
+    const again = h("button", { class: "btn btn-small", type: "button" }, t("agents.check_again"));
+    again.addEventListener("click", () => void this.load(true));
+    return h(
+      "div",
+      {},
+      h("p", {}, t("agents.estimates_missing")),
+      h("p", { class: "muted small" }, t("agents.need_uv")),
+      h("div", { class: "agents-actions" }, link, again),
+      message,
     );
   }
 

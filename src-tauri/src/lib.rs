@@ -150,6 +150,7 @@ pub fn run() {
             commands::af_summary,
             commands::af_install_service,
             commands::af_setup_agents,
+            commands::af_setup_python,
             commands::af_self_update,
         ])
         .setup(move |app| {

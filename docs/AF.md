@@ -21,10 +21,20 @@ This version of the app does not download `af`.
 | `af summary --period today\|7d\|30d --utc-offset-minutes N` | Agents view opened, then every 30 s while it is on screen | no |
 | `af service install` | *Install the service* clicked | yes: a per-user background service |
 | `af setup --yes --global` | *Configure agents* clicked | yes: the agents' own settings files |
+| `af python setup` | *Set up estimates* clicked | yes: `af`'s own Python environment, in its state folder (downloads packages) |
 | `af self update` | *Update af* clicked (Settings → Updates) | yes: replaces `af` with its latest release |
 
 Every run has a time limit (10 s for the two reads, 60 s for the first two
-actions, 5 min for an update) and a limit on how much output is kept.
+actions, 5 min for the two that download) and a limit on how much output is kept.
+
+`af` is started with the app's `PATH` plus the usual places user tools are
+installed to (`~/.local/bin`, `~/.cargo/bin`, Homebrew's), because an app
+started from the Dock does not have them and `af` looks for `uv` there.
+
+When `af status` says its Python runtime is missing and that nothing on the
+computer can build it (no `uv`, no usable Python), the view links to uv's
+install instructions: uv brings the right Python with it. The app installs
+neither.
 
 ## The contract
 

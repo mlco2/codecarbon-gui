@@ -320,6 +320,18 @@ export interface AfStatus {
   receiver: { endpoint: string; reachable: boolean; note: string | null };
   /** `running` is null where it cannot be asked. */
   collector: { running: boolean | null };
+  /**
+   * `af`'s own Python runtime, needed for the impact estimates (null from
+   * an `af` that does not report it). `provisioner` null: neither uv nor a
+   * usable Python is installed, and uv is the thing to install.
+   */
+  python?: {
+    ready: boolean;
+    problem: string | null;
+    fix: string | null;
+    provisioner: string | null;
+    uv_install_url: string | null;
+  } | null;
   agents: AfAgentStatus[];
 }
 
@@ -451,13 +463,16 @@ export const afSummary = (
   utcOffsetMinutes: number,
 ): Promise<AfOutcome<AfSummary>> =>
   invoke<AfOutcome<AfSummary>>("af_summary", { period, utcOffsetMinutes });
-// The three below change the user's machine: call them from a click only.
+// The ones below change the user's machine: call them from a click only.
 /** `af service install`. */
 export const afInstallService = (): Promise<AfOutcome<AfActionOutput>> =>
   invoke<AfOutcome<AfActionOutput>>("af_install_service");
 /** `af setup --yes --global`: edits the agents' own configuration files. */
 export const afSetupAgents = (): Promise<AfOutcome<AfActionOutput>> =>
   invoke<AfOutcome<AfActionOutput>>("af_setup_agents");
+/** `af python setup`: `af` builds the Python runtime its estimates need. */
+export const afSetupPython = (): Promise<AfOutcome<AfActionOutput>> =>
+  invoke<AfOutcome<AfActionOutput>>("af_setup_python");
 /** `af self update`: `af` downloads and verifies its own release. */
 export const afSelfUpdate = (): Promise<AfOutcome<AfActionOutput>> =>
   invoke<AfOutcome<AfActionOutput>>("af_self_update");

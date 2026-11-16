@@ -21,12 +21,14 @@ reports within a week.
   it prints, and nothing else (see [docs/AF.md](docs/AF.md)):
   * `af status` and `af summary` while the Agents view is open (and
     `af status` when Settings is opened). Both only read.
-  * `af service install`, `af setup --yes --global` and `af self update`,
-    each only when the user clicks its button. These change the computer,
+  * `af service install`, `af setup --yes --global`, `af python setup` and
+    `af self update`, each only when the user clicks its button. These change the computer,
     and it is `af` that makes the changes: a per-user background service
     (launchd / systemd) that receives the agents' usage, the agents' own
     settings files (`~/.claude/settings.json`, Codex's `config.toml`) so that
-    they send it, and `af`'s own state folder.
+    they send it, and `af`'s own state folder (including, for
+    `af python setup`, a Python environment whose packages `af` downloads
+    with uv or pip).
   * That background service belongs to `af`: the app does not start, stop or
     supervise it, and it keeps running when the app is closed.
   * This version of the app does not download or install `af`.

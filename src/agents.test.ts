@@ -181,6 +181,34 @@ describe("what keeps usage from being recorded", () => {
   });
 });
 
+describe("the runtime the estimates need", () => {
+  const runtime = (provisioner: string | null) => ({
+    ready: false,
+    problem: "venv directory missing",
+    fix: "run `af python setup`",
+    provisioner,
+    uv_install_url: "https://docs.astral.sh/uv/getting-started/installation/",
+  });
+
+  it("is not mentioned when it is ready, or when af does not report it", () => {
+    expect(setup(status()).estimates).toBe("ok");
+    expect(setup(status({ python: null })).estimates).toBe("ok");
+  });
+
+  it("is offered when af can build it, and uv is recommended when nothing can", () => {
+    const can = setup(status({ python: runtime("uv") }));
+    expect([can.estimates, can.needsAttention]).toEqual(["setup", true]);
+    const cannot = setup(status({ python: runtime(null) }));
+    expect(cannot.estimates).toBe("need_uv");
+    expect(cannot.uvUrl).toBe("https://docs.astral.sh/uv/getting-started/installation/");
+  });
+
+  it("never opens a link that is not https", () => {
+    const odd = setup(status({ python: { ...runtime(null), uv_install_url: "file:///etc/passwd" } }));
+    expect(odd.uvUrl).toBe("https://docs.astral.sh/uv/getting-started/installation/");
+  });
+});
+
 describe("Settings → Updates: af", () => {
   it("enables the update only for an af that updates itself", () => {
     expect(afUpdateRow(ok(status())).canUpdate).toBe(false);

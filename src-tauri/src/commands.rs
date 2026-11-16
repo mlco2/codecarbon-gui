@@ -253,6 +253,12 @@ pub async fn af_setup_agents(app: AppHandle) -> CmdResult<af::Outcome<af::Action
     Ok(af::act(&app, af::Action::SetupAgents).await)
 }
 
+/// "Set up estimates" button: `af python setup`.
+#[tauri::command]
+pub async fn af_setup_python(app: AppHandle) -> CmdResult<af::Outcome<af::ActionOutput>> {
+    Ok(af::act(&app, af::Action::SetupPython).await)
+}
+
 /// "Update af" button: `af self update`.
 #[tauri::command]
 pub async fn af_self_update(app: AppHandle) -> CmdResult<af::Outcome<af::ActionOutput>> {

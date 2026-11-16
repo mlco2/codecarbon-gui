@@ -99,7 +99,24 @@ pub struct Status {
     pub service: Service,
     pub receiver: Receiver,
     pub collector: StatusCollector,
+    /// Absent from an `af` that does not report it yet.
+    #[serde(default)]
+    pub python: Option<PythonRuntime>,
     pub agents: Vec<AgentStatus>,
+}
+
+/// `af`'s own Python runtime, which its impact estimates need. Without it
+/// tokens are still recorded; there are no impact figures.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct PythonRuntime {
+    pub ready: bool,
+    /// What is wrong and what to do, in `af`'s words.
+    pub problem: Option<String>,
+    pub fix: Option<String>,
+    /// What `af python setup` would build it with here ("uv", "python");
+    /// `None`: neither is installed, and uv is the thing to install.
+    pub provisioner: Option<String>,
+    pub uv_install_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -271,7 +288,7 @@ impl Period {
 
 // --- Actions -------------------------------------------------------------------
 
-/// The three things the user can ask `af` to do from the panel. Each one
+/// The things the user can ask `af` to do from the panel. Each one
 /// changes the user's machine: see SECURITY.md for what they write.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
@@ -281,6 +298,10 @@ pub enum Action {
     /// `af setup --yes --global`: writes the agents' user configuration
     /// (`~/.claude/settings.json`, Codex's `config.toml`).
     SetupAgents,
+    /// `af python setup`: `af` builds its own Python environment (in its
+    /// state folder) with uv or the system's Python, downloading the
+    /// packages its estimates need.
+    SetupPython,
     /// `af self update`: `af` downloads its own latest release from GitHub
     /// and verifies its Sigstore signature itself.
     SelfUpdate,
@@ -291,13 +312,15 @@ impl Action {
         match self {
             Action::InstallService => &["service", "install"],
             Action::SetupAgents => &["setup", "--yes", "--global"],
+            Action::SetupPython => &["python", "setup"],
             Action::SelfUpdate => &["self", "update"],
         }
     }
 
     fn timeout(self) -> Duration {
         match self {
-            Action::SelfUpdate => UPDATE_TIMEOUT,
+            // Both download.
+            Action::SelfUpdate | Action::SetupPython => UPDATE_TIMEOUT,
             Action::InstallService | Action::SetupAgents => ACTION_TIMEOUT,
         }
     }
@@ -394,6 +417,10 @@ fn run(
         .stderr(Stdio::piped());
     if let Some(cwd) = cwd.filter(|dir| dir.is_dir()) {
         command.current_dir(cwd);
+        // An app started from the Dock or a launcher gets a bare PATH,
+        // without the places uv and user tools are installed to; `af` then
+        // would not find the uv that is there.
+        command.env("PATH", child_path(std::env::var_os("PATH"), cwd));
     }
     #[cfg(windows)]
     {
@@ -429,6 +456,27 @@ fn run(
         stdout: stdout.recv_timeout(DRAIN).unwrap_or_default(),
         stderr: stderr.recv_timeout(DRAIN).unwrap_or_default(),
     })
+}
+
+/// `path`, then where user-installed tools usually are (under `home`, and
+/// Homebrew's), for the `af` we start. Existing entries keep their order.
+fn child_path(path: Option<OsString>, home: &Path) -> OsString {
+    let mut dirs: Vec<PathBuf> = path
+        .iter()
+        .flat_map(|path| std::env::split_paths(path))
+        .collect();
+    let extra = [
+        home.join(".local").join("bin"),
+        home.join(".cargo").join("bin"),
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/usr/local/bin"),
+    ];
+    for dir in extra {
+        if !dirs.contains(&dir) {
+            dirs.push(dir);
+        }
+    }
+    std::env::join_paths(dirs).unwrap_or_else(|_| path.unwrap_or_default())
 }
 
 /// Read a pipe to its end on a thread (so a chatty process never blocks on
@@ -841,7 +889,25 @@ mod tests {
             ["summary", "--period", "30d", "--utc-offset-minutes=-300"]
         );
         assert_eq!(Action::InstallService.args(), ["service", "install"]);
+        let home = Path::new("/home/someone");
+        let path = child_path(
+            Some(OsString::from("/usr/bin:/home/someone/.local/bin")),
+            home,
+        );
+        let dirs: Vec<PathBuf> = std::env::split_paths(&path).collect();
+        assert_eq!(
+            dirs[0],
+            Path::new("/usr/bin"),
+            "the given entries come first"
+        );
+        assert_eq!(
+            dirs.iter().filter(|d| d.ends_with(".local/bin")).count(),
+            1,
+            "nothing is listed twice"
+        );
+        assert!(dirs.contains(&PathBuf::from("/opt/homebrew/bin")));
         assert_eq!(Action::SetupAgents.args(), ["setup", "--yes", "--global"]);
+        assert_eq!(Action::SetupPython.args(), ["python", "setup"]);
         assert_eq!(Action::SelfUpdate.args(), ["self", "update"]);
     }
 

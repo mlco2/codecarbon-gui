@@ -226,9 +226,20 @@ export interface Setup {
   agents: AfAgentStatus[];
   /** Offer "Configure agents" (`af setup`). */
   offerSetup: boolean;
-  /** Something keeps usage from being recorded: show the card. */
+  /**
+   * `af`'s Python runtime, which the impact estimates need: "ok", "setup"
+   * (`af python setup` can build it: offered), or "need_uv" (nothing to
+   * build it with: the user is pointed to uv, which brings Python too).
+   */
+  estimates: "ok" | "setup" | "need_uv";
+  /** Where uv's install instructions are. */
+  uvUrl: string;
+  /** Something keeps usage from being recorded or estimated: show the card. */
   needsAttention: boolean;
 }
+
+/** uv's install instructions, when `af` does not say where they are. */
+export const UV_URL = "https://docs.astral.sh/uv/getting-started/installation/";
 
 const STATES = [
   "receiving",
@@ -263,13 +274,19 @@ export function setup(status: AfStatus): Setup {
   const agents = status.agents.filter((a) => agentState(a.state) !== "not_installed");
   const states = agents.map((a) => agentState(a.state));
   const offerSetup = states.some((s) => s === "not_configured" || s === "misconfigured");
+  const python = status.python;
+  const estimates = !python || python.ready ? "ok" : python.provisioner ? "setup" : "need_uv";
   return {
+    estimates,
+    // Only an https link is ever opened.
+    uvUrl: python?.uv_install_url?.startsWith("https://") ? python.uv_install_url : UV_URL,
     collector,
     receiverNote: collecting ? null : status.receiver.note,
     offerService: collector === "service_missing",
     agents,
     offerSetup,
-    needsAttention: collector !== "ok" || offerSetup || states.includes("needs_restart"),
+    needsAttention:
+      collector !== "ok" || offerSetup || states.includes("needs_restart") || estimates !== "ok",
   };
 }
 
