@@ -57,6 +57,21 @@ pub struct HistoryPoint {
 }
 
 /// Everything the UI needs to render, serialised as-is to the front-end.
+/// How many warnings are kept (the whole state is sent to the panel on
+/// every change), and how long one may be.
+pub const NOTES_CAP: usize = 20;
+pub const NOTE_MAX_CHARS: usize = 500;
+
+/// `message`, cut to [`NOTE_MAX_CHARS`] characters (then an ellipsis).
+fn bounded_note(message: &str) -> String {
+    if message.chars().count() <= NOTE_MAX_CHARS {
+        return message.to_string();
+    }
+    let mut cut: String = message.chars().take(NOTE_MAX_CHARS).collect();
+    cut.push('…');
+    cut
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct TrackerState {
     pub phase: Phase,
@@ -493,8 +508,14 @@ impl TrackerState {
             },
             AgentEvent::Log(line) => {
                 let msg = line.message.trim();
-                if !msg.is_empty() && !self.notes.iter().any(|n| n == msg) {
-                    self.notes.push(msg.to_string());
+                let msg = bounded_note(msg);
+                if !msg.is_empty() && !self.notes.contains(&msg) {
+                    // Messages that differ only by a time or a number are
+                    // not deduplicated: the oldest make room.
+                    if self.notes.len() >= NOTES_CAP {
+                        self.notes.remove(0);
+                    }
+                    self.notes.push(msg);
                 }
             }
             AgentEvent::Error(err) if err.is_account_error() => self.account.on_error(err),
@@ -1411,5 +1432,30 @@ mod tests {
         assert_eq!(v["updater"]["phase"], "installing");
         assert_eq!(v["updater"]["percent"], 100);
         assert_eq!(v["update"]["version"], "0.2.0");
+    }
+    #[test]
+    fn notes_are_bounded_in_number_and_in_length() {
+        let mut s = TrackerState::default();
+        s.reduce(&ready());
+        for i in 0..(NOTES_CAP + 30) {
+            s.reduce(&AgentEvent::Log(LogLine {
+                level: "warning".into(),
+                message: format!("warning at 12:00:{i:02}"),
+            }));
+        }
+        assert_eq!(s.notes.len(), NOTES_CAP);
+        assert_eq!(
+            s.notes.last().unwrap(),
+            &format!("warning at 12:00:{}", NOTES_CAP + 29),
+            "the most recent ones are kept"
+        );
+
+        s.reduce(&AgentEvent::Log(LogLine {
+            level: "warning".into(),
+            message: "é".repeat(NOTE_MAX_CHARS * 3),
+        }));
+        let long = s.notes.last().unwrap();
+        assert_eq!(long.chars().count(), NOTE_MAX_CHARS + 1);
+        assert!(long.ends_with('…'));
     }
 }
