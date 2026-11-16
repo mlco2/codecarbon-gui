@@ -491,6 +491,10 @@ impl TrackerState {
             AgentEvent::Stopped { summary } => {
                 self.phase = Phase::Idle;
                 self.last_summary = Some(summary.clone());
+                // The measurement itself went well; its history row did not.
+                if let Some(why) = &summary.history_error {
+                    self.error = Some(AppError::HistoryNotSaved(why.clone()));
+                }
             }
             AgentEvent::Status(status) => match status.state.as_str() {
                 "running" => {
@@ -1457,5 +1461,24 @@ mod tests {
         let long = s.notes.last().unwrap();
         assert_eq!(long.chars().count(), NOTE_MAX_CHARS + 1);
         assert!(long.ends_with('…'));
+    }
+    #[test]
+    fn a_stop_whose_history_was_not_saved_says_so() {
+        let mut s = TrackerState::default();
+        s.reduce(&ready());
+        s.begin_start();
+        s.reduce(&started());
+        s.begin_stop();
+        s.reduce(&AgentEvent::Stopped {
+            summary: Summary {
+                history_error: Some("No space left on device".into()),
+                ..Default::default()
+            },
+        });
+        assert_eq!(s.phase, Phase::Idle);
+        assert_eq!(
+            s.error,
+            Some(AppError::HistoryNotSaved("No space left on device".into()))
+        );
     }
 }

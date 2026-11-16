@@ -321,17 +321,23 @@ class FinalCsvOutput:
         with self._lock:
             self._written = True
 
-    def write(self) -> None:
-        """Write the row once; later calls are no-ops. Never raises."""
+    def write(self) -> str | None:
+        """Write the row once; later calls are no-ops. Never raises.
+
+        Returns why the row could not be written, or ``None`` (written, or
+        nothing to write). A failed write is not remembered as done: calling
+        again tries again, so a run is not lost to a full disk.
+        """
         with self._lock:
             if self._written or self._latest is None:
-                return
+                return None
+            try:
+                self._file.out(self._latest, None)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Could not write the run to %s: %s", self.path, exc)
+                return str(exc) or type(exc).__name__
             self._written = True
-            latest = self._latest
-        try:
-            self._file.out(latest, None)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Could not write the run to %s: %s", self.path, exc)
+            return None
 
 
 # --------------------------------------------------------------------------- extraction
@@ -554,6 +560,9 @@ class TrackerSession:
     ) -> None:
         self._tracker_factory = tracker_factory
         self._csv_factory = csv_factory
+        # Runs whose history row could not be written (full disk…): kept,
+        # and tried again each time a run stops.
+        self._unsaved: list[Any] = []
         self._default_log_level = default_log_level
         self._country_codes = country_codes
         self._reset()
@@ -715,11 +724,27 @@ class TrackerSession:
             count, data = capture.snapshot()
             if count == before:
                 data = safe_getattr(tracker, "final_emissions_data") or self._last_data
-            if csv_output is not None and hasattr(csv_output, "write"):
-                csv_output.write()
-            return self._summary(data, csv_output)
+            history_error = self._save_history(csv_output)
+            summary = self._summary(data, csv_output)
+            summary["history_error"] = history_error
+            summary["unsaved_runs"] = len(self._unsaved)
+            return summary
         finally:
             self._reset()
+
+    def _save_history(self, csv_output: Any) -> str | None:
+        """Write this run's row, after those of earlier runs that failed.
+
+        Returns why this run's row could not be written, or ``None``.
+        """
+        still_unsaved = [old for old in self._unsaved if old.write() is not None]
+        error = None
+        if csv_output is not None and hasattr(csv_output, "write"):
+            error = csv_output.write()
+            if error is not None:
+                still_unsaved.append(csv_output)
+        self._unsaved = still_unsaved
+        return error
 
     def _summary(self, data: Any, csv_output: Any) -> dict[str, Any]:
         intensity = observed_carbon_intensity(data)

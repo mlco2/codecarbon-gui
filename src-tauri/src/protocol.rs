@@ -178,6 +178,9 @@ pub struct Summary {
     pub emissions_rate_kg_s: f64,
     pub avg_power_w: Breakdown,
     pub carbon_intensity_g_per_kwh: Option<f64>,
+    /// Why this run's row could not be added to the history file, if it
+    /// could not (the agent keeps it and tries again when a run stops).
+    pub history_error: Option<String>,
 }
 
 /// Payload of the `status` event.

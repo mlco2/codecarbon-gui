@@ -264,6 +264,8 @@ export const en = {
   "error.open_folder_failed": "Cannot open the data folder ({detail}).",
   "error.history_read_failed": "Cannot read the history ({detail}).",
   "error.settings_save_failed": "Cannot save the settings ({detail}).",
+  "error.history_not_saved":
+    "Measurement stopped, but its history could not be saved ({detail}). Free some disk space: it is saved the next time a measurement stops, as long as the app stays open.",
   "error.settings_restored":
     "The settings could not be read. The last saved copy was restored: please check them.",
   "error.settings_reset":

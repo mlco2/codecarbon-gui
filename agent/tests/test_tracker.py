@@ -245,6 +245,8 @@ def test_session_start_sample_stop(tmp_path):
     assert summary["run_id"] == "run-123"
     assert summary["avg_power_w"] == {"cpu": 10.0, "gpu": 0.0, "ram": 5.0, "total": 15.0}
     assert summary["output_file"].endswith("emissions.csv")
+    assert summary["history_error"] is None
+    assert summary["unsaved_runs"] == 0
     assert len(FakeCsv.instances[-1].rows) == 1  # one CSV row per run
 
 
@@ -318,6 +320,53 @@ def test_final_csv_output_writes_once(tmp_path):
     discarded.discard()
     discarded.exit()
     assert written == ["last"]
+
+
+def test_final_csv_output_failed_write_is_not_marked_written(tmp_path):
+    output = FinalCsvOutput(str(tmp_path))
+    written = []
+    disk = {"full": True}
+
+    def out(total, delta):
+        if disk["full"]:
+            raise OSError("No space left on device")
+        written.append(total)
+
+    output._file = SimpleNamespace(out=out)
+    output.out("run", None)
+    assert "No space left" in output.write()
+    assert output.write() is not None  # still failing: tried again, not skipped
+    disk["full"] = False
+    assert output.write() is None
+    assert output.write() is None  # written: later calls are no-ops
+    assert written == ["run"]
+
+
+def test_session_reports_unsaved_history_and_saves_it_with_the_next_run(tmp_path):
+    disk = {"full": True}
+
+    class FlakyCsv(FakeCsv):
+        def write(self):
+            if self._latest is None or self.rows:
+                return None
+            if disk["full"]:
+                return "No space left on device"
+            self.rows.append(self._latest)
+            return None
+
+    session, _ = fake_session()
+    session._csv_factory = FlakyCsv
+    session.start({"output_dir": str(tmp_path)})
+    first = session.stop()
+    assert first["history_error"] == "No space left on device"
+    assert first["unsaved_runs"] == 1
+
+    disk["full"] = False
+    session.start({"output_dir": str(tmp_path)})
+    second = session.stop()
+    assert second["history_error"] is None
+    assert second["unsaved_runs"] == 0
+    assert [len(csv.rows) for csv in FakeCsv.instances[-2:]] == [1, 1]
 
 
 def test_final_csv_output_missing_dir_raises(tmp_path):
