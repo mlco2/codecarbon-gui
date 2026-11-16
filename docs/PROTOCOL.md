@@ -88,9 +88,14 @@ average that CodeCarbon writes in its CSV), because the UI is a live meter.
   "energy_kwh":{…},"emissions_kg":…, "emissions_rate_kg_s":…,
   "avg_power_w":{"cpu":…,"gpu":…,"ram":…,"total":…},
   "carbon_intensity_g_per_kwh":56.0,
-  "output_file":"/path/to/emissions.csv"}}
+  "output_file":"/path/to/emissions.csv",
+  "history_error":null,"unsaved_runs":0}}
 ```
-`output_file` is `null` when `save_to_file` is false.
+`output_file` is `null` when `save_to_file` is false. `history_error` is why
+this run's row could not be written to it (a full disk, for example), else
+`null`. The agent keeps a row it could not write and tries again each time a
+run stops; `unsaved_runs` is how many are still waiting. They are lost if the
+agent exits first.
 
 ### `status` — reply to `status`
 ```json

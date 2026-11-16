@@ -37,12 +37,16 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - name: Install what ships in the sidecar (CodeCarbon + PyInstaller)
-        # Not our own package: it is not on PyPI, and pip-audit --strict refuses
-        # anything it cannot look up. It has no dependencies besides codecarbon.
-        run: python -m pip install "codecarbon>=3.3" pyinstaller pip-audit
-      - name: Audit the installed environment
-        run: pip-audit --strict --desc on
+      - name: Install what ships in the sidecar (the agent, its dependencies, PyInstaller)
+        # The agent itself, so that every dependency it declares is resolved
+        # (CodeCarbon, Authlib, joserfc, requests) the way the release does.
+        run: python -m pip install ./agent pyinstaller
+      - name: List what was resolved
+        # Without our own package: it is not on PyPI, and pip-audit --strict
+        # refuses anything it cannot look up.
+        run: python -m pip freeze --exclude codecarbon-agent | tee shipped-requirements.txt
+      - name: Audit exactly that list
+        run: pipx run pip-audit --strict --desc on --no-deps --disable-pip -r shipped-requirements.txt
 
   npm:
     name: npm audit (front-end / Tauri CLI)

@@ -1,7 +1,7 @@
 name: Release
 
-# Builds the installers for every platform and attaches them to a GitHub
-# pre-release. Triggered by pushing a tag `vX.Y.Z` (or manually, which uses
+# Builds the installers for every platform and attaches them to a draft
+# GitHub pre-release, published once every platform is built and verified. Triggered by pushing a tag `vX.Y.Z` (or manually, which uses
 # the version in src-tauri/tauri.conf.json as the tag).
 #
 # Automatic updates: once the repository has the TAURI_SIGNING_PRIVATE_KEY
@@ -84,7 +84,15 @@ jobs:
           # PIP_CONSTRAINTS is expanded unquoted on purpose: empty on most
           # targets, one requirement such as "cryptography<49" on Intel Macs.
           python -m pip install --only-binary=cryptography "./agent" pyinstaller $PIP_CONSTRAINTS
+          # What this build resolved, and so what the sidecar is frozen from:
+          # audited before anything is built from it, and kept with the run.
+          python -m pip freeze --exclude codecarbon-agent | tee shipped-requirements-${{ matrix.name }}.txt
+          pipx run pip-audit --strict --desc on --no-deps --disable-pip -r shipped-requirements-${{ matrix.name }}.txt
           python agent/build.py --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: shipped-requirements-${{ matrix.name }}
+          path: shipped-requirements-${{ matrix.name }}.txt
       - name: Self-test the frozen agent
         shell: bash
         run: |
@@ -152,7 +160,10 @@ jobs:
             **Linux**: `.AppImage`, `.deb` or `.rpm`.
 
             Full instructions: https://github.com/mlco2/codecarbon-gui/blob/main/docs/INSTALL.md
-          releaseDraft: false
+          # A draft until every platform is built and verified: the
+          # `checksums` job publishes it. A failed check then leaves a
+          # draft nobody can download, not a public broken installer.
+          releaseDraft: true
           prerelease: true
           # latest.json only for signed builds (INCLUDE_UPDATER unset: false).
           includeUpdaterJson: ${{ env.INCLUDE_UPDATER == 'true' }}
@@ -253,3 +264,7 @@ jobs:
           if missing:
               sys.exit(f"::error::latest.json lacks {', '.join(missing)}: re-run the release jobs")
           PY
+      # Last, and only here: every build job passed its own verification
+      # (this job needs them all) and the checksums are attached.
+      - name: Publish the release
+        run: gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --draft=false

@@ -48,6 +48,18 @@ pub enum AppError {
     HistoryReadFailed(String),
     #[error("Cannot save the settings ({0}).")]
     SettingsSaveFailed(String),
+    /// A stopped measurement could not be added to the history file.
+    #[error(
+        "Measurement stopped, but its history could not be saved ({0}). \
+         Free some disk space: it is saved the next time a measurement stops."
+    )]
+    HistoryNotSaved(String),
+    /// The settings file could not be read; the last good copy was used.
+    #[error("The settings could not be read. The last saved copy was restored: check them.")]
+    SettingsRestored,
+    /// The settings file could not be read and there was no good copy.
+    #[error("The settings could not be read and were reset to their defaults.")]
+    SettingsReset,
     #[error("Settings saved, but launch at login could not be changed ({0}).")]
     LaunchAtLoginFailed(String),
 
@@ -123,6 +135,9 @@ impl AppError {
             OpenFolderFailed(_) => "open_folder_failed",
             HistoryReadFailed(_) => "history_read_failed",
             SettingsSaveFailed(_) => "settings_save_failed",
+            HistoryNotSaved(_) => "history_not_saved",
+            SettingsRestored => "settings_restored",
+            SettingsReset => "settings_reset",
             LaunchAtLoginFailed(_) => "launch_at_login_failed",
             InvalidInterval => "invalid_interval",
             InvalidCountry => "invalid_country",
@@ -160,6 +175,7 @@ impl AppError {
             | OpenFolderFailed(d)
             | HistoryReadFailed(d)
             | SettingsSaveFailed(d)
+            | HistoryNotSaved(d)
             | LaunchAtLoginFailed(d)
             | SignInRejected(d)
             | DashboardError(d)
@@ -189,6 +205,9 @@ impl AppError {
             OpenFolderFailed(d()),
             HistoryReadFailed(d()),
             SettingsSaveFailed(d()),
+            HistoryNotSaved(d()),
+            SettingsRestored,
+            SettingsReset,
             LaunchAtLoginFailed(d()),
             InvalidInterval,
             InvalidCountry,

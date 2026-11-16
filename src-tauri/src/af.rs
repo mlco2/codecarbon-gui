@@ -428,6 +428,13 @@ fn run(
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x0800_0000);
     }
+    #[cfg(unix)]
+    {
+        // Its own process group, so that everything it starts (uv, pip,
+        // a compiler) can be ended with it: see `kill_tree`.
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
     let mut child = command
         .spawn()
         .map_err(|e| RunError::Spawn(e.to_string()))?;
@@ -440,13 +447,11 @@ fn run(
             Ok(Some(status)) => break status,
             Ok(None) if Instant::now() < deadline => std::thread::sleep(POLL),
             Ok(None) => {
-                let _ = child.kill();
-                let _ = child.wait();
+                kill_tree(&mut child);
                 return Err(RunError::TimedOut);
             }
             Err(e) => {
-                let _ = child.kill();
-                let _ = child.wait();
+                kill_tree(&mut child);
                 return Err(RunError::Spawn(e.to_string()));
             }
         }
@@ -477,6 +482,38 @@ fn child_path(path: Option<OsString>, home: &Path) -> OsString {
         }
     }
     std::env::join_paths(dirs).unwrap_or_else(|_| path.unwrap_or_default())
+}
+
+/// End `child` and everything it started. Killing `af` alone would leave
+/// the package installer it runs going on, holding the output pipes open.
+///
+/// Unix: the child leads its own process group (see `run`), which is sent
+/// `KILL`. Windows: `taskkill /T` ends the process tree. The system tools
+/// are used so that no dependency is needed for two system calls.
+fn kill_tree(child: &mut std::process::Child) {
+    let pid = child.id().to_string();
+    #[cfg(unix)]
+    let mut killer = {
+        let mut command = Command::new("/bin/kill");
+        command.args(["-KILL", "--", &format!("-{pid}")]);
+        command
+    };
+    #[cfg(windows)]
+    let mut killer = {
+        use std::os::windows::process::CommandExt;
+        let mut command = Command::new("taskkill");
+        command.args(["/PID", &pid, "/T", "/F"]);
+        command.creation_flags(0x0800_0000);
+        command
+    };
+    let _ = killer
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    // Whatever the tool did, the child itself must be gone and reaped.
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 /// Read a pipe to its end on a thread (so a chatty process never blocks on
@@ -1226,5 +1263,39 @@ mod tests {
             assert_eq!(data.output.chars().count(), MAX_TEXT);
             let _ = std::fs::remove_dir_all(dir);
         }
+    }
+    /// `af python setup` starts uv, which starts more: when the time is up
+    /// none of them may be left running.
+    #[cfg(unix)]
+    #[test]
+    fn a_timeout_ends_what_the_command_started_too() {
+        let dir = std::env::temp_dir().join(format!("cc-af-tree-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let pid_file = dir.join("grandchild.pid");
+        let script = format!("sleep 30 & echo $! > '{}'; wait", pid_file.display());
+        let outcome = run(
+            Path::new("/bin/sh"),
+            &["-c", &script],
+            None,
+            Duration::from_millis(400),
+        );
+        assert!(matches!(outcome, Err(RunError::TimedOut)));
+        let pid = std::fs::read_to_string(&pid_file)
+            .unwrap()
+            .trim()
+            .to_string();
+        let alive = || {
+            Command::new("/bin/kill")
+                .args(["-0", &pid])
+                .stderr(Stdio::null())
+                .status()
+                .is_ok_and(|status| status.success())
+        };
+        let gone = (0..40).any(|_| {
+            std::thread::sleep(Duration::from_millis(50));
+            !alive()
+        });
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(gone, "the process the command started is still running");
     }
 }

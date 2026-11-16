@@ -276,6 +276,12 @@ export const fr: Messages = {
   "error.open_folder_failed": "Impossible d'ouvrir le dossier des données ({detail}).",
   "error.history_read_failed": "Impossible de lire l'historique ({detail}).",
   "error.settings_save_failed": "Impossible d'enregistrer les réglages ({detail}).",
+  "error.history_not_saved":
+    "Mesure arrêtée, mais son historique n'a pas pu être enregistré ({detail}). Libérez de l'espace disque : il sera enregistré au prochain arrêt d'une mesure, tant que l'application reste ouverte.",
+  "error.settings_restored":
+    "Les réglages n'ont pas pu être lus. La dernière copie enregistrée a été restaurée : vérifiez-les.",
+  "error.settings_reset":
+    "Les réglages n'ont pas pu être lus et ont été réinitialisés. Le fichier illisible a été conservé sous le nom settings.invalid.json.",
   "error.launch_at_login_failed":
     "Réglages enregistrés, mais le lancement à l'ouverture de session n'a pas pu être modifié ({detail}).",
   "error.invalid_interval": "L'intervalle de mesure doit être compris entre 1 et 60 secondes.",

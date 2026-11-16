@@ -122,28 +122,101 @@ fn non_empty(s: &Option<String>) -> Option<String> {
 }
 
 impl Settings {
-    /// Read the settings file, falling back to defaults if it is missing or
-    /// unreadable (the problem is logged, never fatal).
+    /// Read the settings file; defaults if it is missing. Never fatal.
     pub fn load(path: &Path) -> Self {
-        match fs::read_to_string(path) {
-            Ok(text) => serde_json::from_str(&text).unwrap_or_else(|e| {
-                log::warn!("ignoring invalid settings file {}: {e}", path.display());
-                Self::default()
-            }),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Self::default(),
-            Err(e) => {
-                log::warn!("cannot read settings file {}: {e}", path.display());
-                Self::default()
+        Self::load_checked(path).settings
+    }
+
+    /// Read the settings file and say when it could not be used.
+    ///
+    /// A missing file is a first start: defaults, no problem. A file that
+    /// cannot be read or parsed is kept aside (`settings.invalid.json`) and
+    /// the last good copy ([`backup_path`]) is used; without one, defaults.
+    /// Either way `problem` tells the user, who would otherwise find their
+    /// settings changed with no explanation.
+    pub fn load_checked(path: &Path) -> Loaded {
+        let why = match fs::read_to_string(path) {
+            Ok(text) => match serde_json::from_str(&text) {
+                Ok(settings) => {
+                    return Loaded {
+                        settings,
+                        problem: None,
+                    }
+                }
+                Err(e) => e.to_string(),
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Loaded {
+                    settings: Self::default(),
+                    problem: None,
+                }
             }
+            Err(e) => e.to_string(),
+        };
+        log::warn!("cannot use the settings file {}: {why}", path.display());
+        if let Err(e) = fs::copy(path, invalid_path(path)) {
+            log::warn!("cannot keep a copy of the unusable settings file: {e}");
+        }
+        let backup = fs::read_to_string(backup_path(path))
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok());
+        match backup {
+            Some(settings) => Loaded {
+                settings,
+                problem: Some(AppError::SettingsRestored),
+            },
+            None => Loaded {
+                settings: Self::default(),
+                problem: Some(AppError::SettingsReset),
+            },
         }
     }
 
     /// Write the settings file (creating its directory).
+    ///
+    /// The new content goes to a temporary file that then replaces the
+    /// settings file in one step, so a crash or a full disk leaves the old
+    /// file intact, never a truncated one. The file being replaced, when it
+    /// is valid, is kept as the last good copy. Both hold the API key: on
+    /// Unix they are readable by their owner only (on Windows the app's
+    /// configuration folder is already private to the user).
     pub fn save(&self, path: &Path) -> anyhow::Result<()> {
+        use std::io::Write;
+
         if let Some(dir) = path.parent() {
             fs::create_dir_all(dir)?;
         }
-        fs::write(path, serde_json::to_string_pretty(self)?)?;
+        let text = serde_json::to_string_pretty(self)?;
+
+        let is_valid = fs::read_to_string(path)
+            .ok()
+            .is_some_and(|old| serde_json::from_str::<Settings>(&old).is_ok());
+        if is_valid {
+            let backup = backup_path(path);
+            fs::copy(path, &backup)?;
+            make_private(&backup)?;
+        }
+
+        let tmp = path.with_extension("json.tmp");
+        let written = (|| -> std::io::Result<()> {
+            let mut options = fs::OpenOptions::new();
+            options.write(true).create(true).truncate(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            let mut file = options.open(&tmp)?;
+            // A temporary file left by an earlier, less careful version.
+            make_private(&tmp)?;
+            file.write_all(text.as_bytes())?;
+            file.sync_all()?;
+            fs::rename(&tmp, path)
+        })();
+        if let Err(e) = written {
+            let _ = fs::remove_file(&tmp);
+            return Err(e.into());
+        }
         Ok(())
     }
 
@@ -230,6 +303,36 @@ impl Settings {
 }
 
 /// Where the settings file lives.
+/// What [`Settings::load_checked`] found.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Loaded {
+    pub settings: Settings,
+    /// Why these are not the settings the user saved, if they are not.
+    pub problem: Option<AppError>,
+}
+
+/// The last settings file that was valid, kept by [`Settings::save`].
+pub fn backup_path(path: &Path) -> PathBuf {
+    path.with_extension("json.bak")
+}
+
+/// Where a settings file that could not be read is kept.
+pub fn invalid_path(path: &Path) -> PathBuf {
+    path.with_extension("invalid.json")
+}
+
+/// Readable and writable by the owner only (Unix).
+fn make_private(path: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+    Ok(())
+}
+
 pub fn settings_path(config_dir: &Path) -> PathBuf {
     config_dir.join(SETTINGS_FILE)
 }
@@ -473,5 +576,78 @@ mod tests {
         let v = serde_json::to_value(&c).unwrap();
         assert!(v.get("country_iso_code").is_some());
         assert!(v.get("pue").is_none());
+    }
+    #[test]
+    fn a_broken_file_is_replaced_by_the_last_good_one_and_said_so() {
+        let dir = temp_dir("recover");
+        let path = settings_path(&dir);
+        let first = Settings {
+            interval_secs: 5.0,
+            ..Default::default()
+        };
+        first.save(&path).unwrap();
+        let second = Settings {
+            interval_secs: 7.0,
+            ..Default::default()
+        };
+        // The second save keeps the first as the last good copy.
+        second.save(&path).unwrap();
+        assert_eq!(Settings::load_checked(&path).problem, None);
+
+        fs::write(&path, "{ \"interval_secs\": 7.0, ").unwrap();
+        let loaded = Settings::load_checked(&path);
+        assert_eq!(loaded.settings, first);
+        assert_eq!(loaded.problem, Some(AppError::SettingsRestored));
+        // The broken file is kept, for whoever wants to look at it.
+        assert!(invalid_path(&path).is_file());
+    }
+
+    #[test]
+    fn a_broken_file_with_no_good_copy_resets_and_says_so() {
+        let dir = temp_dir("reset");
+        let path = settings_path(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(&path, "not json").unwrap();
+        let loaded = Settings::load_checked(&path);
+        assert_eq!(loaded.settings, Settings::default());
+        assert_eq!(loaded.problem, Some(AppError::SettingsReset));
+    }
+
+    #[test]
+    fn saving_never_leaves_a_half_written_file_behind() {
+        let dir = temp_dir("atomic");
+        let path = settings_path(&dir);
+        Settings::default().save(&path).unwrap();
+        let names: Vec<String> = fs::read_dir(&dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert!(!names.iter().any(|n| n.ends_with(".tmp")), "{names:?}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_file_and_its_copy_are_readable_by_the_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = temp_dir("private");
+        let path = settings_path(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        // A file left world-readable by an earlier version.
+        fs::write(&path, serde_json::to_string(&Settings::default()).unwrap()).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+
+        let with_key = Settings {
+            api: ApiSettings {
+                api_key: "secret".into(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        with_key.save(&path).unwrap();
+        with_key.save(&path).unwrap();
+        for file in [path.clone(), backup_path(&path)] {
+            let mode = fs::metadata(&file).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "{}", file.display());
+        }
     }
 }
