@@ -1418,39 +1418,32 @@ svg.eq-icon {
 /* ---- Agents (coding-agent usage, read from the `af` CLI) ------------------ */
 
 :root {
-  /* One colour per kind of token; the same five in the bar and its legend. */
-  --token-input: #2e7d32;
-  --token-output: #1565c0;
-  --token-cache_read: #8d6e63;
-  --token-cache_write: #ef6c00;
-  --token-thought: #6a1b9a;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --token-input: #66bb6a;
-    --token-output: #64b5f6;
-    --token-cache_read: #bcaaa4;
-    --token-cache_write: #ffb74d;
-    --token-thought: #ce93d8;
-  }
+  /* One colour per kind of token, the same five in the bar and its legend,
+     from the brand palette where it has one. Cache reads, usually most of
+     the total, take the quiet gray so the rest stays readable. */
+  --token-input: var(--cc-bar);
+  --token-output: #4f9bfb;
+  --token-cache_read: var(--cc-disabled);
+  --token-cache_write: var(--cc-alert-warning-bg);
+  --token-thought: #b27663;
 }
 
 .segmented {
   display: flex;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius);
   overflow: hidden;
-  background: var(--surface);
+  background: var(--cc-bg);
 }
 
 .segmented button {
   appearance: none;
+  font-family: var(--cc-font);
   flex: 1;
   border: 0;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--cc-border);
   background: none;
-  color: var(--muted);
+  color: var(--cc-text-2);
   font: inherit;
   font-size: 12.5px;
   padding: 6px 8px;
@@ -1461,9 +1454,10 @@ svg.eq-icon {
   border-right: 0;
 }
 
+/* Lime is a fill, never text: the chosen period is a lime block. */
 .segmented button[aria-pressed="true"] {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--cc-lime);
+  color: var(--cc-ink);
   font-weight: 600;
 }
 
@@ -1473,7 +1467,7 @@ svg.eq-icon {
   margin: 10px 0 8px;
   border-radius: 5px;
   overflow: hidden;
-  background: var(--border);
+  background: var(--cc-border);
   /* A hairline between kinds, so two neighbours never merge. */
   gap: 1px;
 }
@@ -1523,6 +1517,8 @@ svg.eq-icon {
 }
 
 .impact-value {
+  font-family: var(--cc-font-data);
+  color: var(--cc-kpi);
   font-size: 18px;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
@@ -1535,7 +1531,7 @@ svg.eq-icon {
 }
 
 .agents-notice {
-  border-color: color-mix(in srgb, var(--muted) 35%, var(--border));
+  border-color: var(--cc-marker);
 }
 
 .agents-notice p,
@@ -1581,14 +1577,14 @@ svg.eq-icon {
   height: 4px;
   margin: 4px 0;
   border-radius: 2px;
-  background: var(--border);
+  background: var(--cc-border);
   overflow: hidden;
 }
 
 .share-fill {
   display: block;
   height: 100%;
-  background: var(--accent);
+  background: var(--cc-bar);
 }
 
 .agents-actions {
@@ -1617,7 +1613,7 @@ svg.eq-icon {
   padding: 8px;
   max-height: 160px;
   overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius);
   font-size: 11.5px;
 }
