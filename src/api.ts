@@ -464,6 +464,12 @@ export const afSummary = (
 ): Promise<AfOutcome<AfSummary>> =>
   invoke<AfOutcome<AfSummary>>("af_summary", { period, utcOffsetMinutes });
 // The ones below change the user's machine: call them from a click only.
+/**
+ * Download the `af` release this app pins, check it against its hash, and
+ * put it in the app's own folder.
+ */
+export const afInstall = (): Promise<AfOutcome<AfActionOutput>> =>
+  invoke<AfOutcome<AfActionOutput>>("af_install");
 /** `af service install`. */
 export const afInstallService = (): Promise<AfOutcome<AfActionOutput>> =>
   invoke<AfOutcome<AfActionOutput>>("af_install_service");

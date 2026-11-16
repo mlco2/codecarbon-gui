@@ -241,6 +241,12 @@ pub async fn af_summary(
     Ok(af::summary(&app, period, utc_offset_minutes).await)
 }
 
+/// "Install af" button: the pinned, checksum-verified release.
+#[tauri::command]
+pub async fn af_install(app: AppHandle) -> CmdResult<af::Outcome<af::ActionOutput>> {
+    Ok(af::install(&app).await)
+}
+
 /// "Install the service" button: `af service install`.
 #[tauri::command]
 pub async fn af_install_service(app: AppHandle) -> CmdResult<af::Outcome<af::ActionOutput>> {

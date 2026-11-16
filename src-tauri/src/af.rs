@@ -341,6 +341,8 @@ pub struct Env {
     pub path: Option<OsString>,
     /// The user's home directory.
     pub home: Option<PathBuf>,
+    /// `%LOCALAPPDATA%` (Windows), where `af`'s installer puts it there.
+    pub local_app_data: Option<PathBuf>,
 }
 
 impl Env {
@@ -348,16 +350,32 @@ impl Env {
         Self {
             path: std::env::var_os("PATH"),
             home: app.path().home_dir().ok(),
+            local_app_data: std::env::var_os("LOCALAPPDATA").map(PathBuf::from),
         }
     }
 }
 
-/// The `af` to run: the first one in `path`, else `~/.local/bin/af`.
+/// Where `af`'s own installers put it, and so where "Install af" puts it
+/// too: `~/.local/bin` (`install.sh`), or
+/// `%LOCALAPPDATA%\Programs\agentic-footprint` on Windows (`install.ps1`).
+/// One place, whichever way `af` was installed: the terminal and the app
+/// then use the same file.
+pub fn install_dir(env: &Env, windows: bool) -> Option<PathBuf> {
+    if windows {
+        env.local_app_data
+            .as_ref()
+            .map(|dir| dir.join("Programs").join("agentic-footprint"))
+    } else {
+        env.home
+            .as_ref()
+            .map(|home| home.join(".local").join("bin"))
+    }
+}
+
+/// The `af` to run: the first one in `path`, else the one in its
+/// installers' folder ([`install_dir`]), which is not always on `PATH`.
 ///
-/// `None` is a normal answer: the panel then links to the install
-/// instructions. A later version can download a pinned, verified release
-/// of `af` into the app's data folder and look there first: that goes
-/// HERE (there is no release to pin yet, so nothing is downloaded).
+/// `None` is a normal answer: the panel then offers to install it.
 pub fn locate(env: &Env) -> Option<PathBuf> {
     let from_path = env
         .path
@@ -365,9 +383,8 @@ pub fn locate(env: &Env) -> Option<PathBuf> {
         .flat_map(|path| std::env::split_paths(path))
         // An empty or relative entry means "the current directory".
         .filter(|dir| dir.is_absolute());
-    let installer_default = env.home.iter().map(|home| home.join(".local").join("bin"));
     from_path
-        .chain(installer_default)
+        .chain(install_dir(env, cfg!(windows)))
         .map(|dir| dir.join(BINARY))
         .find(|file| is_executable(file))
 }
@@ -597,6 +614,76 @@ async fn blocking<T: Send + 'static>(
         })
 }
 
+/// "Install af": download the pinned release of `af` for this computer,
+/// check it against the hash this app was built with, put it where `af`'s
+/// own installer would ([`install_dir`]), and tell `af` it came from a
+/// release (so that `af self update` manages it from then on): what the
+/// installer does with a release binary. Nothing is installed unless the
+/// download is exactly the pinned file.
+pub async fn install(app: &AppHandle) -> Outcome<ActionOutput> {
+    use crate::af_release;
+
+    let failed = |detail: String| Outcome::Failed {
+        exit_code: None,
+        detail,
+    };
+    let (os, arch) = (std::env::consts::OS, std::env::consts::ARCH);
+    let Some(pin) = af_release::pin_for(os, arch) else {
+        return failed(format!(
+            "there is no af release for this computer ({os} {arch})"
+        ));
+    };
+    let env = Env::of(app);
+    let Some(dir) = install_dir(&env, cfg!(windows)) else {
+        return failed("the folder af is installed to cannot be determined".to_string());
+    };
+    log::info!("af: downloading {}", af_release::url(pin.asset));
+    let bytes = match af_release::download(pin).await {
+        Ok(bytes) => bytes,
+        Err(e) => return failed(format!("the download failed: {e}")),
+    };
+    if !af_release::matches(&bytes, pin) {
+        log::warn!("af: {} is not the pinned file", pin.asset);
+        return failed(
+            "the downloaded file is not the release this app expects (checksum mismatch): \
+             nothing was installed"
+                .to_string(),
+        );
+    }
+    blocking(move || {
+        let _one_at_a_time = ACTION.lock().unwrap_or_else(|e| e.into_inner());
+        let binary = match af_release::place(&bytes, &dir) {
+            Ok(binary) => binary,
+            Err(e) => {
+                return Outcome::Failed {
+                    exit_code: None,
+                    detail: format!("cannot write {}: {e}", dir.display()),
+                }
+            }
+        };
+        log::info!("af: installed {} {}", af_release::VERSION, binary.display());
+        // Run the file just installed, whatever else is on PATH.
+        let binary_text = binary.to_string_lossy().into_owned();
+        let args = ["self", "record-install", "--binary", binary_text.as_str()];
+        match run(&binary, &args, env.home.as_deref(), ACTION_TIMEOUT) {
+            Ok(done) if done.status.success() => Outcome::Ok {
+                data: ActionOutput {
+                    output: format!("af {} installed", af_release::VERSION),
+                },
+            },
+            Ok(done) => Outcome::Failed {
+                exit_code: done.status.code(),
+                detail: tail(&done.stderr),
+            },
+            Err(RunError::Spawn(detail)) => Outcome::SpawnFailed { detail },
+            Err(RunError::TimedOut) => Outcome::TimedOut {
+                seconds: ACTION_TIMEOUT.as_secs(),
+            },
+        }
+    })
+    .await
+}
+
 /// `af status`: what is installed, configured and running. Read-only.
 pub async fn status(app: &AppHandle) -> Outcome<Status> {
     let env = Env::of(app);
@@ -642,6 +729,7 @@ mod tests {
         Env {
             path: Some(path.to_os_string()),
             home: home.map(Path::to_path_buf),
+            local_app_data: None,
         }
     }
 
@@ -934,6 +1022,7 @@ mod tests {
         let env = Env {
             path: std::env::var_os("PATH"),
             home: std::env::var_os("HOME").map(PathBuf::from),
+            local_app_data: None,
         };
         assert!(locate(&env).is_some(), "af is not installed here");
         let status = read_with::<Status>(&env, &["status"], READ_TIMEOUT);
@@ -1013,7 +1102,8 @@ mod tests {
             assert_eq!(
                 locate(&Env {
                     path: None,
-                    home: Some(home.clone())
+                    home: Some(home.clone()),
+                    local_app_data: None,
                 }),
                 Some(in_home)
             );
@@ -1226,5 +1316,32 @@ mod tests {
             assert_eq!(data.output.chars().count(), MAX_TEXT);
             let _ = std::fs::remove_dir_all(dir);
         }
+    }
+    #[test]
+    fn af_is_installed_where_its_own_installers_put_it() {
+        let env = Env {
+            path: None,
+            home: Some(PathBuf::from("/home/ann")),
+            local_app_data: Some(PathBuf::from("/appdata/local")),
+        };
+        assert_eq!(
+            install_dir(&env, false),
+            Some(PathBuf::from("/home/ann").join(".local").join("bin"))
+        );
+        assert_eq!(
+            install_dir(&env, true),
+            Some(
+                PathBuf::from("/appdata/local")
+                    .join("Programs")
+                    .join("agentic-footprint")
+            )
+        );
+        let nothing = Env {
+            path: None,
+            home: None,
+            local_app_data: None,
+        };
+        assert_eq!(install_dir(&nothing, false), None);
+        assert_eq!(install_dir(&nothing, true), None);
     }
 }

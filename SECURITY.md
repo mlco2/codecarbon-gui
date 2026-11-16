@@ -31,7 +31,16 @@ reports within a week.
     with uv or pip).
   * That background service belongs to `af`: the app does not start, stop or
     supervise it, and it keeps running when the app is closed.
-  * This version of the app does not download or install `af`.
+  * **Installing `af`.** When no `af` is found, the view offers *Install
+    af*. Only on that click, the app downloads one file over https, from
+    `https://github.com/mlco2/agentic-footprint/releases/download/`: the
+    `af` binary of the single release this version of the app pins. The
+    file is compared with a SHA-256 written in the app's source
+    (`src-tauri/src/af_release.rs`); if it differs, nothing is installed.
+    It is placed where `af`'s own installer puts it (`~/.local/bin/af`;
+    `%LOCALAPPDATA%\Programs\agentic-footprint\af.exe` on Windows), so
+    the app and a terminal use the same file. Later versions come from `af self update`, which verifies the Sigstore
+    signature of what it downloads.
 * **Network access**: one geolocation request at the start of a measurement
   when no country is set in Settings, and uploads when the user enables the
   CodeCarbon API. In builds that have an updater key, also an update check

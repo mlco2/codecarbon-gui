@@ -9,9 +9,26 @@ reads `af`'s files: it runs `af` and reads the JSON it prints
 
 ## Where `af` is looked for
 
-`PATH`, then `~/.local/bin/af` (its installer's default). Not found is a
-normal state: the view explains it and links to the install instructions.
-This version of the app does not download `af`.
+`PATH`, then the folder its installers use (`~/.local/bin`;
+`%LOCALAPPDATA%\Programs\agentic-footprint` on Windows), which is not
+always on `PATH`. Not found is a normal state: the view explains it and
+offers *Install af*.
+
+## Installing af
+
+*Install af* downloads the `af` binary of one release, pinned in
+`src-tauri/src/af_release.rs` with the SHA-256 of the file for each platform
+(macOS arm64 and x86-64, Linux x86-64, Windows x86-64). A download that does
+not match its hash is discarded. The binary goes where `af`'s own installer
+puts a release binary, and the app then runs `af self record-install`, as
+the installer does, so that `af self update` manages it from then on. The
+result is the installer's, with two differences for now: the folder is not
+added to the user's `PATH` when it is missing from it, and the installer's
+next steps (Python runtime, background service, agent configuration) are
+not run at once but offered as buttons in the view.
+
+To pin a newer release, change `VERSION` and the four hashes (from the
+release's `SHA256SUMS`); the tests check their form.
 
 ## Commands the app runs
 

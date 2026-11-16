@@ -10,6 +10,7 @@
  */
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
+  afInstall,
   afInstallService,
   afSetupAgents,
   afSetupPython,
@@ -63,8 +64,9 @@ const CHART_W = 300;
 const BARS_H = 72;
 const TICKS_H = 16;
 
-type ActionName = "service" | "setup" | "python";
+type ActionName = "install" | "service" | "setup" | "python";
 const ACTIONS: Record<ActionName, () => Promise<AfOutcome<AfActionOutput>>> = {
+  install: afInstall,
   service: afInstallService,
   setup: afSetupAgents,
   python: afSetupPython,
@@ -255,7 +257,11 @@ export class AgentsView {
       p.kind === "not_found"
         ? h("p", {}, t("agents.not_found_body"))
         : h("p", { class: p.kind === "failed" ? "af-reason" : "" }, p.text),
-      p.kind === "not_found" ? h("p", { class: "muted small" }, t("agents.not_found_how")) : null,
+      p.kind === "not_found"
+        ? this.actionButton("install", "agents.install_af", "agents.install_af_hint")
+        : null,
+      // Why an install that was just tried did not work.
+      p.kind === "not_found" ? this.actionResult() : null,
       h("div", { class: "agents-actions" }, p.kind === "failed" ? null : link, again),
       message,
     );

@@ -17,6 +17,7 @@
 //! * [`af`]         – coding-agent usage read from the `af` CLI (Agents view)
 
 pub mod af;
+pub mod af_release;
 pub mod agent;
 pub mod commands;
 pub mod controller;
@@ -148,6 +149,7 @@ pub fn run() {
             commands::install_update,
             commands::af_status,
             commands::af_summary,
+            commands::af_install,
             commands::af_install_service,
             commands::af_setup_agents,
             commands::af_setup_python,
