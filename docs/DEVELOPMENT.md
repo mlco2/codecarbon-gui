@@ -110,8 +110,10 @@ the installers without updater files. To switch updates on (once):
    The workflow fails early if the secret is set but the public key is still
    the placeholder, and the `SHA256SUMS` job checks that `latest.json` lists
    all four platforms.
-5. **Roll it out**: GitHub's `releases/latest` URL skips pre-releases, and
-   our releases are created as pre-releases. Installed apps see a release
+5. **Roll it out**: the workflow builds into a draft release and publishes
+   it (as a pre-release) only once every platform is built and verified; a
+   failed run leaves a draft to delete. GitHub's `releases/latest` URL skips
+   pre-releases, and our releases are created as pre-releases. Installed apps see a release
    only once you edit it and untick *Set as a pre-release* (*Set as the
    latest release*). Until then it can be tested by downloading it by hand.
 
