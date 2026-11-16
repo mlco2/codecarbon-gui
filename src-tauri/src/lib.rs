@@ -159,9 +159,23 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             // Closing the panel hides it; the app keeps running in the tray.
+            // Without a tray it quits (gracefully: the measurement is
+            // stopped and saved first).
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
-                let _ = window.hide();
+                let app = window.app_handle();
+                let has_tray = app
+                    .state::<AppCore>()
+                    .tray
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .is_some();
+                match on_close(has_tray) {
+                    OnClose::Hide => {
+                        let _ = window.hide();
+                    }
+                    OnClose::Quit => controller::quit(app),
+                }
             }
         })
         .build(context);
@@ -212,7 +226,8 @@ fn setup(app: &mut App, updates_configured: bool) -> anyhow::Result<()> {
     // when they click "Open data folder".
     let data_dir = app.path().app_data_dir()?.join("measurements");
     let settings_path = settings::settings_path(&config_dir);
-    let settings = Settings::load(&settings_path);
+    let loaded = Settings::load_checked(&settings_path);
+    let settings = loaded.settings;
     log::info!("settings: {}", settings_path.display());
     log::info!("data folder: {}", data_dir.display());
     if let Err(e) = std::fs::create_dir_all(&data_dir) {
@@ -234,6 +249,10 @@ fn setup(app: &mut App, updates_configured: bool) -> anyhow::Result<()> {
     app.manage(AppCore::new(settings, settings_path, data_dir, agent));
     app.manage(updater::Updates::new(updates_configured));
     app.state::<AppCore>().tracker().updater.configured = updates_configured;
+    // Settings that could not be read are said, not silently replaced.
+    if loaded.problem.is_some() {
+        app.state::<AppCore>().tracker().error = loaded.problem;
+    }
 
     // A missing tray (e.g. a Linux desktop without StatusNotifier support)
     // must not prevent the app from running.
@@ -244,7 +263,13 @@ fn setup(app: &mut App, updates_configured: bool) -> anyhow::Result<()> {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner()) = Some(tray)
         }
-        Err(e) => log::warn!("cannot create the tray icon: {e}"),
+        Err(e) => {
+            // Starting hidden would then look like nothing happened: the
+            // panel is the only way in, so it is shown, and closing it
+            // quits (see `on_close`).
+            log::warn!("cannot create the tray icon: {e}; showing the panel instead");
+            controller::spawn(&handle, |app| controller::show_panel(app, None));
+        }
     }
 
     // Keep the OS login item in sync with the setting (e.g. after reinstall).
@@ -258,8 +283,8 @@ fn setup(app: &mut App, updates_configured: bool) -> anyhow::Result<()> {
     // In the background, once the agent is ready (never blocks start-up).
     updater::start_background_checks(&handle);
 
-    // Developer convenience (and desktops without a tray): show the panel
-    // right away instead of starting hidden.
+    // Developer convenience: show the panel right away instead of
+    // starting hidden.
     if std::env::var_os("CODECARBON_SHOW_PANEL").is_some() {
         controller::spawn(&handle, |app| controller::show_panel(app, None));
     }
@@ -296,4 +321,33 @@ fn quit_on_signals(app: tauri::AppHandle) {
             controller::quit(&app);
         }
     });
+}
+
+/// What closing the panel does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OnClose {
+    /// The app keeps running in the tray.
+    Hide,
+    /// There is no tray icon to open the panel again from: a hidden
+    /// window would leave an app nobody can reach or quit.
+    Quit,
+}
+
+fn on_close(has_tray: bool) -> OnClose {
+    if has_tray {
+        OnClose::Hide
+    } else {
+        OnClose::Quit
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn closing_the_panel_quits_when_there_is_no_tray_to_come_back_from() {
+        assert_eq!(on_close(true), OnClose::Hide);
+        assert_eq!(on_close(false), OnClose::Quit);
+    }
 }

@@ -264,6 +264,10 @@ export const en = {
   "error.open_folder_failed": "Cannot open the data folder ({detail}).",
   "error.history_read_failed": "Cannot read the history ({detail}).",
   "error.settings_save_failed": "Cannot save the settings ({detail}).",
+  "error.settings_restored":
+    "The settings could not be read. The last saved copy was restored: please check them.",
+  "error.settings_reset":
+    "The settings could not be read and were reset to their defaults. The unreadable file was kept as settings.invalid.json.",
   "error.launch_at_login_failed":
     "Settings saved, but launch at login could not be changed ({detail}).",
   "error.invalid_interval": "The measurement interval must be between 1 and 60 seconds.",
