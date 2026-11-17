@@ -295,7 +295,9 @@ export type AfOutcome<T> =
   | { outcome: "timed_out"; seconds: number }
   | { outcome: "failed"; exit_code: number | null; detail: string }
   | { outcome: "invalid_output"; detail: string }
-  | { outcome: "unsupported_protocol"; found: number | null; supported: number };
+  | { outcome: "unsupported_protocol"; found: number | null; supported: number }
+  /** Another action is still running: this one was not started. */
+  | { outcome: "busy" };
 
 export interface AfAgentStatus {
   /** "claude-code", "codex", … */

@@ -357,6 +357,7 @@ export const fr: Messages = {
   "agents.unsupported_unknown": "af a répondu sans version de protocole ; cette version de CodeCarbon comprend la version {supported}. Mettez af à jour.",
   "agents.failed_title": "af n’a pas répondu",
   "agents.problem.spawn_failed": "af n’a pas pu être lancé : {detail}",
+  "agents.problem.busy": "af est occupé par une autre action. Réessayez quand elle sera terminée.",
   "agents.problem.timed_out": "af n’a pas répondu en {seconds} s.",
   "agents.problem.invalid_output": "af a répondu quelque chose que CodeCarbon n’a pas pu lire : {detail}",
   "agents.problem.failed": "af s’est arrêté avec le code {code} : {detail}",

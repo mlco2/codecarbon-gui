@@ -13,6 +13,7 @@ import {
   screen,
   setup,
   share,
+  statusIsDue,
   tokenSplit,
   utcOffsetMinutes,
 } from "./agents";
@@ -209,13 +210,29 @@ describe("the runtime the estimates need", () => {
   });
 });
 
+describe("when af status is read again", () => {
+  it("keeps a good answer between refreshes, and retries a failed one", () => {
+    expect(statusIsDue(ok(status()), false)).toBe(false);
+    expect(statusIsDue(ok(status()), true)).toBe(true);
+    expect(statusIsDue(null, false)).toBe(true);
+    expect(statusIsDue({ outcome: "timed_out", seconds: 10 }, false)).toBe(true);
+    expect(statusIsDue({ outcome: "not_found" }, false)).toBe(true);
+  });
+});
+
 describe("Settings → Updates: af", () => {
   it("enables the update only for an af that updates itself", () => {
     expect(afUpdateRow(ok(status())).canUpdate).toBe(false);
     const managed = afUpdateRow(ok(status({ self_update: { managed: true } })));
     expect([managed.line, managed.showButton, managed.canUpdate]).toEqual(["af 0.1.0", true, true]);
     const missing = afUpdateRow({ outcome: "not_found" });
-    expect([missing.line, missing.showButton]).toEqual(["af is not installed", false]);
+    expect([missing.showButton, missing.visible]).toEqual([false, false]);
+    expect(managed.visible).toBe(true);
+    // Any other failure is shown: there is an af, and it did not answer.
+    const hung = afUpdateRow({ outcome: "timed_out", seconds: 10 });
+    expect([hung.visible, hung.line]).toEqual([true, "af did not answer within 10 s."]);
+    const busy = afUpdateRow({ outcome: "busy" });
+    expect(busy.line).toBe("af is busy with another action. Try again when it is done.");
   });
 });
 

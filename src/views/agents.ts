@@ -41,6 +41,7 @@ import {
   screen,
   settled,
   share,
+  statusIsDue,
   tokenSplit,
   utcOffsetMinutes,
   type Problem,
@@ -126,6 +127,9 @@ export class AgentsView {
   /** The action in progress, and the result of the last one. */
   private running: ActionName | null = null;
   private lastAction: AfOutcome<AfActionOutput> | null = null;
+  /** Kept across the 30 s re-renders: "what af printed" is open, and why a link did not open. */
+  private outputOpen = false;
+  private linkError: string | null = null;
 
   private readonly periodButtons = new Map<AfPeriod, HTMLButtonElement>();
   private readonly body = h("div", { class: "view" });
@@ -144,6 +148,25 @@ export class AgentsView {
     }
     this.root = h("section", { class: "view agents" }, periods, this.body);
     this.render();
+    // The panel is hidden, not closed: when it comes back with this tab
+    // selected, do not wait up to 30 s for fresh numbers.
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") this.refreshNow();
+    });
+    try {
+      void getCurrentWindow()
+        .onFocusChanged(({ payload: focused }) => {
+          if (focused) this.refreshNow();
+        })
+        .catch(() => undefined);
+    } catch {
+      // Not in the app's window (tests): the timer alone refreshes.
+    }
+  }
+
+  /** The panel came back: read again, if this tab is the one shown. */
+  private refreshNow(): void {
+    if (this.timer !== null && !this.running) void this.load(false);
   }
 
   /** The Agents tab was opened (true) or left (false). */
@@ -177,7 +200,7 @@ export class AgentsView {
   private async load(withStatus: boolean): Promise<void> {
     const seq = ++this.loadSeq;
     const [status, summary] = await Promise.all([
-      withStatus || !this.status ? settled(afStatus()) : this.status,
+      this.status && !statusIsDue(this.status, withStatus) ? this.status : settled(afStatus()),
       settled(afSummary(this.period, utcOffsetMinutes())),
     ]);
     if (seq !== this.loadSeq) return;
@@ -191,6 +214,8 @@ export class AgentsView {
     if (this.running) return;
     this.running = action;
     this.lastAction = null;
+    this.outputOpen = false;
+    this.linkError = null;
     this.render();
     this.lastAction = await settled(ACTIONS[action]());
     this.running = null;
@@ -198,7 +223,24 @@ export class AgentsView {
     await this.load(true);
   }
 
+  /** Draw the view again, keeping keyboard focus where it was. */
   private render(): void {
+    const focused = document.activeElement;
+    const key =
+      focused instanceof HTMLElement && this.body.contains(focused)
+        ? focused.getAttribute("data-focus")
+        : null;
+    this.draw();
+    if (key === null) return;
+    for (const candidate of this.body.querySelectorAll<HTMLElement>("[data-focus]")) {
+      if (candidate.getAttribute("data-focus") === key) {
+        candidate.focus();
+        return;
+      }
+    }
+  }
+
+  private draw(): void {
     for (const [period, button] of this.periodButtons) {
       button.setAttribute("aria-pressed", String(period === this.period));
     }
@@ -232,17 +274,26 @@ export class AgentsView {
   // --- `af` did not answer -------------------------------------------------------
 
   private problemCard(p: Problem): HTMLElement {
-    const again = h("button", { class: "btn btn-small", type: "button" }, t("agents.check_again"));
+    const again = h(
+      "button",
+      { class: "btn btn-small", type: "button", "data-focus": "again" },
+      t("agents.check_again"),
+    );
     again.addEventListener("click", () => {
       this.status = null;
+      this.linkError = null;
       this.render();
       void this.load(true);
     });
-    const message = h("p", { class: "form-message error", role: "status" });
-    const link = h("a", { href: AF_URL, class: "link" }, t("agents.install_link"));
+    const message = this.linkMessage();
+    const link = h(
+      "a",
+      { href: AF_URL, class: "link", "data-focus": "install-link" },
+      t("agents.install_link"),
+    );
     link.addEventListener("click", (e) => {
       e.preventDefault();
-      openUrl(AF_URL).catch((err: unknown) => setText(message, errorMessage(err)));
+      this.open(AF_URL, message);
     });
     const title =
       p.kind === "not_found"
@@ -272,7 +323,12 @@ export class AgentsView {
   private actionButton(action: ActionName, label: MessageKey, hint: MessageKey): HTMLElement {
     const button = h(
       "button",
-      { class: "btn btn-small", type: "button", disabled: this.running !== null },
+      {
+        class: "btn btn-small",
+        type: "button",
+        disabled: this.running !== null,
+        "data-focus": `action:${action}`,
+      },
       this.running === action ? spinner() : null,
       t(label),
     );
@@ -331,13 +387,21 @@ export class AgentsView {
 
   /** No uv and no Python: where to get uv, which brings Python with it. */
   private needUv(url: string): HTMLElement {
-    const message = h("p", { class: "form-message error", role: "status" });
-    const link = h("a", { href: url, class: "link" }, t("agents.install_uv"));
+    const message = this.linkMessage();
+    const link = h(
+      "a",
+      { href: url, class: "link", "data-focus": "uv-link" },
+      t("agents.install_uv"),
+    );
     link.addEventListener("click", (e) => {
       e.preventDefault();
-      openUrl(url).catch((err: unknown) => setText(message, errorMessage(err)));
+      this.open(url, message);
     });
-    const again = h("button", { class: "btn btn-small", type: "button" }, t("agents.check_again"));
+    const again = h(
+      "button",
+      { class: "btn btn-small", type: "button", "data-focus": "again" },
+      t("agents.check_again"),
+    );
     again.addEventListener("click", () => void this.load(true));
     return h(
       "div",
@@ -347,6 +411,20 @@ export class AgentsView {
       h("div", { class: "agents-actions" }, link, again),
       message,
     );
+  }
+
+  /** Where a link's failure to open is said; it survives a re-render. */
+  private linkMessage(): HTMLElement {
+    return h("p", { class: "form-message error", role: "status" }, this.linkError ?? "");
+  }
+
+  private open(url: string, message: HTMLElement): void {
+    this.linkError = null;
+    setText(message, "");
+    openUrl(url).catch((err: unknown) => {
+      this.linkError = errorMessage(err);
+      setText(message, this.linkError);
+    });
   }
 
   /** "Done." or why not, and what `af` printed. */
@@ -366,15 +444,22 @@ export class AgentsView {
         { class: failed ? "form-message error" : "form-message" },
         failed ? problemText(failed) : t("agents.action_done"),
       ),
-      output
-        ? h(
-            "details",
-            { class: "small" },
-            h("summary", {}, t("agents.action_output")),
-            h("pre", { class: "af-output" }, output),
-          )
-        : null,
+      output ? this.outputDetails(output) : null,
     );
+  }
+
+  /** What `af` printed; stays open across re-renders while it is being read. */
+  private outputDetails(output: string): HTMLElement {
+    const details = h(
+      "details",
+      { class: "small", open: this.outputOpen },
+      h("summary", { "data-focus": "output" }, t("agents.action_output")),
+      h("pre", { class: "af-output" }, output),
+    );
+    details.addEventListener("toggle", () => {
+      this.outputOpen = details.open;
+    });
+    return details;
   }
 
   // --- The numbers ---------------------------------------------------------------

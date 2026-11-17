@@ -36,7 +36,10 @@ const COUNT_UNITS: readonly [number, MessageKey][] = [
   [1e9, "agents.count_b"],
 ];
 
-/** A count in at most 3 significant digits: "950", "12.3 k", "4.56 M", "1.2 B". */
+/**
+ * A count in at most 3 significant digits, without trailing zeros:
+ * "950", "12.3 k", "4.56 M", "1.2 B".
+ */
 export function count(x: number): string {
   if (!Number.isFinite(x) || x < 0) return DASH;
   if (x < 1000) return formatNumber(x, 0);
@@ -158,6 +161,15 @@ export type Problem =
   /** Anything else, with the reason. */
   | { kind: "failed"; text: string };
 
+/**
+ * `af status` is asked again: on opening and after an action (`asked`),
+ * and whenever the last answer was a failure. One time-out on a busy
+ * machine must not stay on screen until the user does something.
+ */
+export function statusIsDue<T>(last: AfOutcome<T> | null, asked: boolean): boolean {
+  return asked || last?.outcome !== "ok";
+}
+
 /** Why there is no answer; null for an answer. */
 export function problem<T>(outcome: AfOutcome<T>): Problem | null {
   switch (outcome.outcome) {
@@ -177,6 +189,8 @@ export function problem<T>(outcome: AfOutcome<T>): Problem | null {
       return { kind: "failed", text: t("agents.problem.spawn_failed", { detail: outcome.detail }) };
     case "timed_out":
       return { kind: "failed", text: t("agents.problem.timed_out", { seconds: outcome.seconds }) };
+    case "busy":
+      return { kind: "failed", text: t("agents.problem.busy") };
     case "invalid_output":
       return {
         kind: "failed",
@@ -337,13 +351,24 @@ export interface AfUpdateRow {
   canUpdate: boolean;
   /** Under the line: what the button does, or why it is disabled. */
   note: string | null;
+  /**
+   * False when `af` is not installed: Settings then says nothing about a
+   * tool the user may never have heard of (the Agents view introduces it).
+   */
+  visible: boolean;
 }
 
 export function afUpdateRow(status: AfOutcome<AfStatus>): AfUpdateRow {
   const failed = problem(status);
   if (failed || status.outcome !== "ok") {
     const line = failed ? problemText(failed) : "";
-    return { line, showButton: false, canUpdate: false, note: null };
+    return {
+      line,
+      showButton: false,
+      canUpdate: false,
+      note: null,
+      visible: status.outcome !== "not_found",
+    };
   }
   const managed = status.data.self_update.managed;
   return {
@@ -351,5 +376,6 @@ export function afUpdateRow(status: AfOutcome<AfStatus>): AfUpdateRow {
     showButton: true,
     canUpdate: managed,
     note: managed ? t("settings.af_managed") : t("settings.af_unmanaged"),
+    visible: true,
   };
 }

@@ -9,9 +9,10 @@ reads `af`'s files: it runs `af` and reads the JSON it prints
 
 ## Where `af` is looked for
 
-`PATH`, then the folder its installers use (`~/.local/bin`;
-`%LOCALAPPDATA%\Programs\agentic-footprint` on Windows), which is not
-always on `PATH`. Not found is a normal state: the view explains it and
+`PATH`, then the folders user tools are installed to (`~/.local/bin`,
+`~/.cargo/bin`, Homebrew's: an app started from the Dock does not get the
+shell's `PATH`), then the folder `af`'s installers use
+(`%LOCALAPPDATA%\Programs\agentic-footprint` on Windows). Not found is a normal state: the view explains it and
 offers *Install af*.
 
 ## Installing af

@@ -155,7 +155,7 @@ class AfRow {
   render(): void {
     if (!this.status) return;
     const row = afUpdateRow(this.status);
-    show(this.root, true);
+    show(this.root, row.visible);
     setText(this.line, row.line);
     show(this.button, row.showButton);
     this.button.disabled = !row.canUpdate || this.updating;

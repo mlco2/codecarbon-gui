@@ -342,6 +342,7 @@ export const en = {
   "agents.unsupported_unknown": "af answered without a protocol version; this version of CodeCarbon understands version {supported}. Update af.",
   "agents.failed_title": "af did not answer",
   "agents.problem.spawn_failed": "af could not be started: {detail}",
+  "agents.problem.busy": "af is busy with another action. Try again when it is done.",
   "agents.problem.timed_out": "af did not answer within {seconds} s.",
   "agents.problem.invalid_output": "af answered something CodeCarbon could not read: {detail}",
   "agents.problem.failed": "af stopped with code {code}: {detail}",

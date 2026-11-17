@@ -86,6 +86,19 @@ pub enum Outcome<T> {
         found: Option<u64>,
         supported: u64,
     },
+    /// Another action (from this view or from Settings) is still running:
+    /// this one was not started.
+    Busy,
+}
+
+/// The right to run an action, or `None` while another one runs: a second
+/// click is refused at once, not kept waiting for minutes.
+fn claim() -> Option<std::sync::MutexGuard<'static, ()>> {
+    match ACTION.try_lock() {
+        Ok(guard) => Some(guard),
+        Err(std::sync::TryLockError::Poisoned(e)) => Some(e.into_inner()),
+        Err(std::sync::TryLockError::WouldBlock) => None,
+    }
 }
 
 // --- `af status` ---------------------------------------------------------------
@@ -372,8 +385,10 @@ pub fn install_dir(env: &Env, windows: bool) -> Option<PathBuf> {
     }
 }
 
-/// The `af` to run: the first one in `path`, else the one in its
-/// installers' folder ([`install_dir`]), which is not always on `PATH`.
+/// The `af` to run: the first one in `path`, else in the folders user
+/// tools are installed to ([`user_tool_dirs`]: an app started from the
+/// Dock does not get the shell's `PATH`), else in its installers' folder
+/// ([`install_dir`]).
 ///
 /// `None` is a normal answer: the panel then offers to install it.
 pub fn locate(env: &Env) -> Option<PathBuf> {
@@ -384,6 +399,7 @@ pub fn locate(env: &Env) -> Option<PathBuf> {
         // An empty or relative entry means "the current directory".
         .filter(|dir| dir.is_absolute());
     from_path
+        .chain(user_tool_dirs(env.home.as_deref()))
         .chain(install_dir(env, cfg!(windows)))
         .map(|dir| dir.join(BINARY))
         .find(|file| is_executable(file))
@@ -445,6 +461,13 @@ fn run(
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x0800_0000);
     }
+    #[cfg(unix)]
+    {
+        // Its own process group, so that a time-out can stop what `af`
+        // started (uv, pip) along with it.
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
     let mut child = command
         .spawn()
         .map_err(|e| RunError::Spawn(e.to_string()))?;
@@ -457,13 +480,11 @@ fn run(
             Ok(Some(status)) => break status,
             Ok(None) if Instant::now() < deadline => std::thread::sleep(POLL),
             Ok(None) => {
-                let _ = child.kill();
-                let _ = child.wait();
+                kill_tree(&mut child);
                 return Err(RunError::TimedOut);
             }
             Err(e) => {
-                let _ = child.kill();
-                let _ = child.wait();
+                kill_tree(&mut child);
                 return Err(RunError::Spawn(e.to_string()));
             }
         }
@@ -475,20 +496,60 @@ fn run(
     })
 }
 
-/// `path`, then where user-installed tools usually are (under `home`, and
-/// Homebrew's), for the `af` we start. Existing entries keep their order.
+/// Stop `child` and every process it started, and reap it.
+fn kill_tree(child: &mut std::process::Child) {
+    let pid = child.id().to_string();
+    // The group `run` put it in (Unix); the process tree (Windows).
+    #[cfg(unix)]
+    let _ = Command::new("/bin/kill")
+        .args(["-KILL", "--", &format!("-{pid}")])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let _ = Command::new("taskkill")
+            .args(["/PID", &pid, "/T", "/F"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .creation_flags(0x0800_0000)
+            .status();
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+/// Where user-installed tools usually are, beyond `PATH`: under `home`,
+/// and Homebrew's. One list, for finding `af` and for the `PATH` of the
+/// `af` we start (which looks for uv there).
+fn user_tool_dirs(home: Option<&Path>) -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = home
+        .iter()
+        .flat_map(|home| {
+            [
+                home.join(".local").join("bin"),
+                home.join(".cargo").join("bin"),
+            ]
+        })
+        .collect();
+    if cfg!(unix) {
+        dirs.push(PathBuf::from("/opt/homebrew/bin"));
+        dirs.push(PathBuf::from("/usr/local/bin"));
+    }
+    dirs
+}
+
+/// `path`, then [`user_tool_dirs`], for the `af` we start. Existing
+/// entries keep their order.
 fn child_path(path: Option<OsString>, home: &Path) -> OsString {
     let mut dirs: Vec<PathBuf> = path
         .iter()
         .flat_map(|path| std::env::split_paths(path))
         .collect();
-    let extra = [
-        home.join(".local").join("bin"),
-        home.join(".cargo").join("bin"),
-        PathBuf::from("/opt/homebrew/bin"),
-        PathBuf::from("/usr/local/bin"),
-    ];
-    for dir in extra {
+    for dir in user_tool_dirs(Some(home)) {
         if !dirs.contains(&dir) {
             dirs.push(dir);
         }
@@ -651,7 +712,9 @@ pub async fn install(app: &AppHandle) -> Outcome<ActionOutput> {
         );
     }
     blocking(move || {
-        let _one_at_a_time = ACTION.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(_one_at_a_time) = claim() else {
+            return Outcome::Busy;
+        };
         let binary = match af_release::place(&bytes, &dir) {
             Ok(binary) => binary,
             Err(e) => {
@@ -708,7 +771,9 @@ pub async fn act(app: &AppHandle, action: Action) -> Outcome<ActionOutput> {
     let env = Env::of(app);
     log::info!("af: running `af {}`", action.args().join(" "));
     let outcome = blocking(move || {
-        let _one_at_a_time = ACTION.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(_one_at_a_time) = claim() else {
+            return Outcome::Busy;
+        };
         act_with(&env, action.args(), action.timeout())
     })
     .await;
@@ -936,6 +1001,7 @@ mod tests {
     fn outcomes_are_tagged_for_the_panel() {
         let tag = |outcome: Outcome<()>| serde_json::to_value(outcome).unwrap();
         assert_eq!(tag(Outcome::NotFound), json!({"outcome": "not_found"}));
+        assert_eq!(tag(Outcome::Busy), json!({"outcome": "busy"}));
         assert_eq!(
             tag(Outcome::TimedOut { seconds: 10 }),
             json!({"outcome": "timed_out", "seconds": 10})
@@ -1227,6 +1293,59 @@ mod tests {
                 }
             );
             let _ = std::fs::remove_dir_all(dir);
+        }
+
+        #[test]
+        fn a_time_out_also_stops_what_af_started() {
+            let _guard = SCRIPTS.lock().unwrap_or_else(|e| e.into_inner());
+            let dir = temp_dir("tree");
+            let pid_file = dir.join("grandchild.pid");
+            let body = format!("sleep 30 &\necho $! > '{}'\nwait", pid_file.display());
+            write(&dir.join("af"), &format!("#!/bin/sh\n{body}\n"), 0o755);
+            let env = env_with(dir.as_os_str(), None);
+            assert_eq!(
+                read_with::<Status>(&env, &["status"], Duration::from_millis(500)),
+                Outcome::TimedOut { seconds: 0 }
+            );
+            let pid = std::fs::read_to_string(&pid_file).expect("the script started");
+            let alive = || {
+                Command::new("/bin/kill")
+                    .args(["-0", pid.trim()])
+                    .stderr(Stdio::null())
+                    .status()
+                    .map(|status| status.success())
+                    .unwrap_or(false)
+            };
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while alive() && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            assert!(!alive(), "the process af started is still running");
+            let _ = std::fs::remove_dir_all(dir);
+        }
+
+        #[test]
+        fn af_is_found_where_user_tools_are_installed_when_path_is_bare() {
+            let _guard = SCRIPTS.lock().unwrap_or_else(|e| e.into_inner());
+            let home = temp_dir("bare-path");
+            let cargo_bin = home.join(".cargo").join("bin");
+            std::fs::create_dir_all(&cargo_bin).unwrap();
+            write(&cargo_bin.join("af"), "#!/bin/sh\n", 0o755);
+            let env = Env {
+                path: Some("/usr/bin:/bin".into()),
+                home: Some(home.clone()),
+                local_app_data: None,
+            };
+            assert_eq!(locate(&env), Some(cargo_bin.join("af")));
+            let _ = std::fs::remove_dir_all(home);
+        }
+
+        #[test]
+        fn a_second_action_is_refused_while_one_runs() {
+            let held = claim().expect("nothing is running");
+            assert!(claim().is_none());
+            drop(held);
+            assert!(claim().is_some());
         }
 
         #[test]
