@@ -6,6 +6,7 @@
 
 use tauri::{AppHandle, Manager};
 
+use crate::af;
 use crate::controller::{self, AppCore};
 use crate::error::AppError;
 use crate::history::{self, Equivalent, Session};
@@ -217,4 +218,55 @@ pub async fn check_for_updates(app: AppHandle) -> CmdResult<Option<UpdateInfo>> 
 #[tauri::command]
 pub async fn install_update(app: AppHandle) -> CmdResult<()> {
     crate::updater::start_install(&app)
+}
+
+// --- Coding agents (`af`, see af.rs) ---------------------------------------
+
+/// `af status`: is `af` there, is its collector running, are the agents
+/// configured. Read-only. A missing or failing `af` is an [`af::Outcome`],
+/// not an error.
+#[tauri::command]
+pub async fn af_status(app: AppHandle) -> CmdResult<af::Outcome<af::Status>> {
+    Ok(af::status(&app).await)
+}
+
+/// `af summary` for `period` ("today", "7d", "30d"); `utc_offset_minutes`
+/// is the panel's offset east of UTC, where its days start. Read-only.
+#[tauri::command]
+pub async fn af_summary(
+    app: AppHandle,
+    period: af::Period,
+    utc_offset_minutes: i32,
+) -> CmdResult<af::Outcome<af::Summary>> {
+    Ok(af::summary(&app, period, utc_offset_minutes).await)
+}
+
+/// "Install af" button: the pinned, checksum-verified release.
+#[tauri::command]
+pub async fn af_install(app: AppHandle) -> CmdResult<af::Outcome<af::ActionOutput>> {
+    Ok(af::install(&app).await)
+}
+
+/// "Install the service" button: `af service install`.
+#[tauri::command]
+pub async fn af_install_service(app: AppHandle) -> CmdResult<af::Outcome<af::ActionOutput>> {
+    Ok(af::act(&app, af::Action::InstallService).await)
+}
+
+/// "Configure agents" button: `af setup --yes --global`.
+#[tauri::command]
+pub async fn af_setup_agents(app: AppHandle) -> CmdResult<af::Outcome<af::ActionOutput>> {
+    Ok(af::act(&app, af::Action::SetupAgents).await)
+}
+
+/// "Set up estimates" button: `af python setup`.
+#[tauri::command]
+pub async fn af_setup_python(app: AppHandle) -> CmdResult<af::Outcome<af::ActionOutput>> {
+    Ok(af::act(&app, af::Action::SetupPython).await)
+}
+
+/// "Update af" button: `af self update`.
+#[tauri::command]
+pub async fn af_self_update(app: AppHandle) -> CmdResult<af::Outcome<af::ActionOutput>> {
+    Ok(af::act(&app, af::Action::SelfUpdate).await)
 }

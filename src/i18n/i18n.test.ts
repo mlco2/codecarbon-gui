@@ -73,6 +73,16 @@ describe("message tables", () => {
       "history.sessions_one",
       "about.agent",
       "account.organization",
+      "tab.agents",
+      "agents.count_k",
+      "agents.count_m",
+      "agents.tokens",
+      "agents.tokens_count_one",
+      "agents.tokens_count_other",
+      "agents.sessions_one",
+      "agents.sessions_other",
+      "agents.co2_value",
+      "settings.af_version",
     ]);
     for (const key of Object.keys(en) as (keyof typeof en)[]) {
       if (!same.has(key)) expect(fr[key], key).not.toBe(en[key]);

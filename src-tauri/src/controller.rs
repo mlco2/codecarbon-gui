@@ -28,7 +28,7 @@ pub const STATE_EVENT: &str = "tracker://state";
 /// view, or by the dashboard sign-in flow).
 pub const SETTINGS_EVENT: &str = "settings://changed";
 /// Event asking the panel to switch view (`"dashboard"`, `"history"`,
-/// `"settings"`, `"about"`).
+/// `"agents"`, `"settings"`, `"about"`).
 pub const NAVIGATE_EVENT: &str = "app://navigate";
 /// Event (no payload) telling the History view to reload `emissions.csv`:
 /// sent when a session stops, after CodeCarbon has appended its row.
