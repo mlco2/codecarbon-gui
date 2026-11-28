@@ -35,7 +35,7 @@ const PINS: &[(&str, &str, Pin)] = &[
         "aarch64",
         Pin {
             asset: "afoot-aarch64-apple-darwin",
-            sha256: "794a77ed0c69258bd1fb0e51387b41897df4dcca306a0a74085378fee17927e4",
+            sha256: "4a5bc23ac5f9ffb3e4f73dd49c8022b8eed6a5ce5ef29adc749f8d369573002e",
         },
     ),
     (
@@ -43,7 +43,7 @@ const PINS: &[(&str, &str, Pin)] = &[
         "x86_64",
         Pin {
             asset: "afoot-x86_64-apple-darwin",
-            sha256: "a506b99da1b3347e1c798f70271f5ef533d3119787cc4cfadf2a5ae18bda2c94",
+            sha256: "b2a0fb6dc2aa5d5210ea1b6d0b107f4d55b9a0c2e3710131503474aaa27b0fd7",
         },
     ),
     (
@@ -51,7 +51,7 @@ const PINS: &[(&str, &str, Pin)] = &[
         "x86_64",
         Pin {
             asset: "afoot-x86_64-unknown-linux-gnu",
-            sha256: "ddfe5dbc2a6a8f893dfe36da4654384ac3e7a962b36195fabc1f5bc81374177e",
+            sha256: "96ef8d8a04cb10835dcfaade64b8b14091cd68e359618fe908c9faf939d81933",
         },
     ),
     (
@@ -59,7 +59,7 @@ const PINS: &[(&str, &str, Pin)] = &[
         "x86_64",
         Pin {
             asset: "afoot-x86_64-pc-windows-msvc.exe",
-            sha256: "8780f8854dac84fed3a5b69004183461c078fa02b9c115a2aac78d1771132125",
+            sha256: "c60647b3a0915abe7ba75f1b96ea34ff124849f04bd5dede7101411f091c6909",
         },
     ),
 ];
