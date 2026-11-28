@@ -1,7 +1,7 @@
 # Coding-agent usage (app → `afoot`)
 
-The *Agents* view shows what coding agents (Claude Code, Codex) use: tokens,
-and an estimate of the impact of the remote inference. The numbers come from
+The *Agents* view shows what coding agents (Claude Code, Codex, OpenCode, Pi:
+the ones `afoot` reports) use: tokens, and an estimate of the impact of the remote inference. The numbers come from
 [`afoot`](https://github.com/mlco2/agentic-footprint) (agentic-footprint), a
 separate command-line tool with its own background collector. The app never
 reads `afoot`'s files: it runs `afoot` and reads the JSON it prints
@@ -38,7 +38,7 @@ release's `SHA256SUMS`); the tests check their form.
 | `afoot status` | Agents view opened, after an action, Settings opened | no |
 | `afoot summary --period today\|7d\|30d --utc-offset-minutes N` | Agents view opened, then every 30 s while it is on screen | no |
 | `afoot service install` | *Install the service* clicked | yes: a per-user background service |
-| `afoot setup --yes --global` | *Configure agents* clicked | yes: the agents' own settings files |
+| `afoot setup --yes --global` | *Configure agents* clicked | yes: the agents' own settings files, and the OpenCode plugin and Pi extension files |
 | `afoot python setup` | *Set up estimates* clicked | yes: `afoot`'s own Python environment, in its state folder (downloads packages) |
 | `afoot self update` | *Update afoot* clicked (Settings → Updates) | yes: replaces `afoot` with its latest release |
 
