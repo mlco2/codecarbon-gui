@@ -1,6 +1,6 @@
 /**
- * Everything the Agents view decides and words, from what `af` answered
- * (`af status`, `af summary`). Pure, so it is unit-tested; the view
+ * Everything the Agents view decides and words, from what `afoot` answered
+ * (`afoot status`, `afoot summary`). Pure, so it is unit-tested; the view
  * (views/agents.ts) only puts the result in the DOM.
  *
  * Two kinds of numbers, never mixed:
@@ -11,22 +11,22 @@
  *   CodeCarbon measures on this computer.
  */
 import type {
-  AfAgentStatus,
-  AfFigures,
-  AfImpact,
-  AfNotEstimated,
-  AfOutcome,
-  AfStatus,
-  AfSummary,
-  AfTokens,
+  AfootAgentStatus,
+  AfootFigures,
+  AfootImpact,
+  AfootNotEstimated,
+  AfootOutcome,
+  AfootStatus,
+  AfootSummary,
+  AfootTokens,
 } from "./api";
 import { round3, sig3, withUnit } from "./format";
 import { errorText, formatNumber, intlLocale, n, t, type MessageKey } from "./i18n/i18n";
 
 const DASH = "–";
 
-/** Where `af` and its install instructions live. */
-export const AF_URL = "https://github.com/mlco2/agentic-footprint";
+/** Where `afoot` and its install instructions live. */
+export const AFOOT_URL = "https://github.com/mlco2/agentic-footprint";
 
 // --- Tokens ----------------------------------------------------------------------
 
@@ -67,7 +67,7 @@ export interface TokenPart {
 }
 
 /** The split of a token total; cache reads usually dominate. */
-export function tokenSplit(tokens: AfTokens): TokenPart[] {
+export function tokenSplit(tokens: AfootTokens): TokenPart[] {
   const value = (kind: TokenKind): number => Math.max(0, tokens[kind] || 0);
   const sum = TOKEN_KINDS.reduce((acc, kind) => acc + value(kind), 0);
   return TOKEN_KINDS.map((kind) => ({
@@ -92,7 +92,7 @@ export function percent(fraction: number): string {
 
 // --- Estimated impacts -----------------------------------------------------------
 
-/** The two criteria shown, and the unit `af` gives them in. */
+/** The two criteria shown, and the unit `afoot` gives them in. */
 export type Criterion = "energy" | "gwp";
 const BASE_UNIT: Record<Criterion, string> = { energy: "kWh", gwp: "kgCO2eq" };
 /** Below 1 base unit, shown in the smaller one (×1000). */
@@ -106,10 +106,10 @@ function rangeText(low: number, high: number, unit: string): string {
 
 /**
  * An impact as a range, both ends in the same unit: "1.2–4.8 Wh",
- * "0.4–2 g" (CO₂e), "1.1–3.2 kWh". Null when `af` gave no figure (no
+ * "0.4–2 g" (CO₂e), "1.1–3.2 kWh". Null when `afoot` gave no figure (no
  * estimated call). A unit we do not expect is shown as it came.
  */
-export function impactRange(remote: Record<string, AfImpact>, criterion: Criterion): string | null {
+export function impactRange(remote: Record<string, AfootImpact>, criterion: Criterion): string | null {
   const impact = remote[criterion];
   if (!impact) return null;
   const { min, max } = impact.total;
@@ -122,12 +122,12 @@ export function impactRange(remote: Record<string, AfImpact>, criterion: Criteri
 }
 
 /** "8 of 10 calls estimated": goes with every impact figure. */
-export function coverage(figures: AfFigures): string {
+export function coverage(figures: AfootFigures): string {
   return n("agents.coverage", figures.calls, { estimated: figures.estimated_calls });
 }
 
 /** "1.2–4.8 Wh · 0.4–2 g CO₂e", or "no estimate" when there is none. */
-export function impactLine(figures: AfFigures): string {
+export function impactLine(figures: AfootFigures): string {
   const energy = impactRange(figures.remote, "energy");
   const gwp = impactRange(figures.remote, "gwp");
   if (figures.estimated_calls === 0 || (!energy && !gwp)) return t("agents.no_estimate");
@@ -135,7 +135,7 @@ export function impactLine(figures: AfFigures): string {
 }
 
 /** The calls and tokens of the models the estimator does not know yet. */
-export function notEstimatedTotals(models: AfNotEstimated[]): { calls: number; tokens: number } {
+export function notEstimatedTotals(models: AfootNotEstimated[]): { calls: number; tokens: number } {
   return models.reduce(
     (acc, m) => ({ calls: acc.calls + m.calls, tokens: acc.tokens + m.tokens }),
     { calls: 0, tokens: 0 },
@@ -143,7 +143,7 @@ export function notEstimatedTotals(models: AfNotEstimated[]): { calls: number; t
 }
 
 /** "model-b: 2 calls, 200 tokens". */
-export function notEstimatedLine(model: AfNotEstimated): string {
+export function notEstimatedLine(model: AfootNotEstimated): string {
   return t("agents.not_estimated_row", {
     model: model.model,
     calls: n("agents.calls", model.calls),
@@ -151,27 +151,27 @@ export function notEstimatedLine(model: AfNotEstimated): string {
   });
 }
 
-// --- When `af` did not answer ------------------------------------------------------
+// --- When `afoot` did not answer ------------------------------------------------------
 
 export type Problem =
   /** Not installed: explained, with a link to the install instructions. */
   | { kind: "not_found" }
-  /** Another protocol version: this `af` is not for this version of the app. */
+  /** Another protocol version: this `afoot` is not for this version of the app. */
   | { kind: "unsupported"; text: string }
   /** Anything else, with the reason. */
   | { kind: "failed"; text: string };
 
 /**
- * `af status` is asked again: on opening and after an action (`asked`),
+ * `afoot status` is asked again: on opening and after an action (`asked`),
  * and whenever the last answer was a failure. One time-out on a busy
  * machine must not stay on screen until the user does something.
  */
-export function statusIsDue<T>(last: AfOutcome<T> | null, asked: boolean): boolean {
+export function statusIsDue<T>(last: AfootOutcome<T> | null, asked: boolean): boolean {
   return asked || last?.outcome !== "ok";
 }
 
 /** Why there is no answer; null for an answer. */
-export function problem<T>(outcome: AfOutcome<T>): Problem | null {
+export function problem<T>(outcome: AfootOutcome<T>): Problem | null {
   switch (outcome.outcome) {
     case "ok":
       return null;
@@ -214,8 +214,8 @@ export function problemText(p: Problem): string {
   return p.kind === "not_found" ? t("agents.not_found_title") : p.text;
 }
 
-/** A command that rejected (it should not) reads like an `af` that did not start. */
-export function settled<T>(call: Promise<AfOutcome<T>>): Promise<AfOutcome<T>> {
+/** A command that rejected (it should not) reads like an `afoot` that did not start. */
+export function settled<T>(call: Promise<AfootOutcome<T>>): Promise<AfootOutcome<T>> {
   return call.catch((e: unknown) => ({ outcome: "spawn_failed", detail: errorText(e) }));
 }
 
@@ -223,26 +223,26 @@ export function settled<T>(call: Promise<AfOutcome<T>>): Promise<AfOutcome<T>> {
 
 export type CollectorState =
   | "ok"
-  /** No service, and `af` can install one here: offered. */
+  /** No service, and `afoot` can install one here: offered. */
   | "service_missing"
   /** A service is installed but does not answer. */
   | "stopped"
-  /** No service manager `af` can use: the user starts `af watch`. */
+  /** No service manager `afoot` can use: the user starts `afoot watch`. */
   | "manual";
 
 export interface Setup {
   collector: CollectorState;
-  /** Why the receiver does not answer, in `af`'s words. */
+  /** Why the receiver does not answer, in `afoot`'s words. */
   receiverNote: string | null;
-  /** Offer "Install the service" (`af service install`). */
+  /** Offer "Install the service" (`afoot service install`). */
   offerService: boolean;
   /** The agents found on this computer, with their state. */
-  agents: AfAgentStatus[];
-  /** Offer "Configure agents" (`af setup`). */
+  agents: AfootAgentStatus[];
+  /** Offer "Configure agents" (`afoot setup`). */
   offerSetup: boolean;
   /**
-   * `af`'s Python runtime, which the impact estimates need: "ok", "setup"
-   * (`af python setup` can build it: offered), or "need_uv" (nothing to
+   * `afoot`'s Python runtime, which the impact estimates need: "ok", "setup"
+   * (`afoot python setup` can build it: offered), or "need_uv" (nothing to
    * build it with: the user is pointed to uv, which brings Python too).
    */
   estimates: "ok" | "setup" | "need_uv";
@@ -252,7 +252,7 @@ export interface Setup {
   needsAttention: boolean;
 }
 
-/** uv's install instructions, when `af` does not say where they are. */
+/** uv's install instructions, when `afoot` does not say where they are. */
 export const UV_URL = "https://docs.astral.sh/uv/getting-started/installation/";
 
 const STATES = [
@@ -275,8 +275,8 @@ export function agentStateLabel(state: string): string {
   return t(`agents.state.${agentState(state)}`);
 }
 
-/** What stands between the agents and a recorded call, from `af status`. */
-export function setup(status: AfStatus): Setup {
+/** What stands between the agents and a recorded call, from `afoot status`. */
+export function setup(status: AfootStatus): Setup {
   const collecting = status.receiver.reachable && status.collector.running !== false;
   const collector: CollectorState = collecting
     ? "ok"
@@ -312,15 +312,15 @@ export type Screen =
   | {
       kind: "ready";
       setup: Setup;
-      summary: AfSummary;
+      summary: AfootSummary;
       /** No call in the period: nothing to chart yet. */
       empty: boolean;
     };
 
 /** What the Agents view shows, from the last answers (null: not asked yet). */
 export function screen(
-  status: AfOutcome<AfStatus> | null,
-  summary: AfOutcome<AfSummary> | null,
+  status: AfootOutcome<AfootStatus> | null,
+  summary: AfootOutcome<AfootSummary> | null,
 ): Screen {
   if (!status || !summary) return { kind: "loading" };
   const failed = problem(status) ?? problem(summary);
@@ -334,31 +334,31 @@ export function screen(
   };
 }
 
-/** Minutes east of UTC, as `af summary --utc-offset-minutes` wants them. */
+/** Minutes east of UTC, as `afoot summary --utc-offset-minutes` wants them. */
 export function utcOffsetMinutes(now: Date = new Date()): number {
   // `getTimezoneOffset` counts the other way (minutes *behind* UTC).
   return -now.getTimezoneOffset() || 0;
 }
 
-// --- Settings → Updates: the `af` row ---------------------------------------------
+// --- Settings → Updates: the `afoot` row ---------------------------------------------
 
-export interface AfUpdateRow {
-  /** "af 0.1.0", "af is not installed", or why it could not be read. */
+export interface AfootUpdateRow {
+  /** "afoot 0.1.0", "afoot is not installed", or why it could not be read. */
   line: string;
-  /** Show the "Update af" button at all (af answered). */
+  /** Show the "Update afoot" button at all (afoot answered). */
   showButton: boolean;
-  /** Enabled only when `af self update` manages this install. */
+  /** Enabled only when `afoot self update` manages this install. */
   canUpdate: boolean;
   /** Under the line: what the button does, or why it is disabled. */
   note: string | null;
   /**
-   * False when `af` is not installed: Settings then says nothing about a
+   * False when `afoot` is not installed: Settings then says nothing about a
    * tool the user may never have heard of (the Agents view introduces it).
    */
   visible: boolean;
 }
 
-export function afUpdateRow(status: AfOutcome<AfStatus>): AfUpdateRow {
+export function afootUpdateRow(status: AfootOutcome<AfootStatus>): AfootUpdateRow {
   const failed = problem(status);
   if (failed || status.outcome !== "ok") {
     const line = failed ? problemText(failed) : "";
@@ -372,10 +372,10 @@ export function afUpdateRow(status: AfOutcome<AfStatus>): AfUpdateRow {
   }
   const managed = status.data.self_update.managed;
   return {
-    line: t("settings.af_version", { version: status.data.af_version }),
+    line: t("settings.afoot_version", { version: status.data.afoot_version }),
     showButton: true,
     canUpdate: managed,
-    note: managed ? t("settings.af_managed") : t("settings.af_unmanaged"),
+    note: managed ? t("settings.afoot_managed") : t("settings.afoot_unmanaged"),
     visible: true,
   };
 }

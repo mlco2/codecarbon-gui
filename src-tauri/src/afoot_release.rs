@@ -1,9 +1,9 @@
-//! The `af` release this version of the app installs.
+//! The `afoot` release this version of the app installs.
 //!
 //! One release is pinned per version of the app: its files' SHA-256 are
-//! written here, so what "Install af" puts on the computer is exactly what
+//! written here, so what "Install afoot" puts on the computer is exactly what
 //! was reviewed with this source, whatever the download server says.
-//! Afterwards `af self update` (Settings → Updates) moves to newer
+//! Afterwards `afoot self update` (Settings → Updates) moves to newer
 //! releases, verifying their Sigstore signatures itself.
 //!
 //! To pin another release: change [`VERSION`] and copy the four hashes
@@ -15,9 +15,9 @@ use std::path::{Path, PathBuf};
 use sha2::{Digest, Sha256};
 
 /// The pinned release of <https://github.com/mlco2/agentic-footprint>.
-pub const VERSION: &str = "0.1.0";
+pub const VERSION: &str = "0.1.1";
 
-/// No `af` binary is anywhere near this size: more is not the release.
+/// No `afoot` binary is anywhere near this size: more is not the release.
 const MAX_BYTES: usize = 64 * 1024 * 1024;
 
 /// One platform's file in the release.
@@ -34,7 +34,7 @@ const PINS: &[(&str, &str, Pin)] = &[
         "macos",
         "aarch64",
         Pin {
-            asset: "af-aarch64-apple-darwin",
+            asset: "afoot-aarch64-apple-darwin",
             sha256: "794a77ed0c69258bd1fb0e51387b41897df4dcca306a0a74085378fee17927e4",
         },
     ),
@@ -42,7 +42,7 @@ const PINS: &[(&str, &str, Pin)] = &[
         "macos",
         "x86_64",
         Pin {
-            asset: "af-x86_64-apple-darwin",
+            asset: "afoot-x86_64-apple-darwin",
             sha256: "a506b99da1b3347e1c798f70271f5ef533d3119787cc4cfadf2a5ae18bda2c94",
         },
     ),
@@ -50,7 +50,7 @@ const PINS: &[(&str, &str, Pin)] = &[
         "linux",
         "x86_64",
         Pin {
-            asset: "af-x86_64-unknown-linux-gnu",
+            asset: "afoot-x86_64-unknown-linux-gnu",
             sha256: "ddfe5dbc2a6a8f893dfe36da4654384ac3e7a962b36195fabc1f5bc81374177e",
         },
     ),
@@ -58,7 +58,7 @@ const PINS: &[(&str, &str, Pin)] = &[
         "windows",
         "x86_64",
         Pin {
-            asset: "af-x86_64-pc-windows-msvc.exe",
+            asset: "afoot-x86_64-pc-windows-msvc.exe",
             sha256: "8780f8854dac84fed3a5b69004183461c078fa02b9c115a2aac78d1771132125",
         },
     ),
@@ -86,12 +86,12 @@ pub fn matches(bytes: &[u8], pin: Pin) -> bool {
     digest == pin.sha256
 }
 
-/// The name of the `af` executable on this system.
+/// The name of the `afoot` executable on this system.
 pub fn binary_name() -> &'static str {
     if cfg!(windows) {
-        "af.exe"
+        "afoot.exe"
     } else {
-        "af"
+        "afoot"
     }
 }
 
@@ -185,9 +185,9 @@ mod tests {
     #[test]
     fn the_file_comes_from_the_pinned_release_over_https() {
         assert_eq!(
-            url("af-x86_64-unknown-linux-gnu"),
+            url("afoot-x86_64-unknown-linux-gnu"),
             format!(
-                "https://github.com/mlco2/agentic-footprint/releases/download/v{VERSION}/af-x86_64-unknown-linux-gnu"
+                "https://github.com/mlco2/agentic-footprint/releases/download/v{VERSION}/afoot-x86_64-unknown-linux-gnu"
             )
         );
     }
@@ -215,11 +215,11 @@ mod tests {
 
     #[test]
     fn the_file_is_placed_executable_and_replaces_the_old_one() {
-        let dir = std::env::temp_dir().join(format!("cc-af-place-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("cc-afoot-place-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        let dest = place(b"first", &dir.join("af")).unwrap();
-        assert_eq!(dest, dir.join("af").join(binary_name()));
-        let again = place(b"second", &dir.join("af")).unwrap();
+        let dest = place(b"first", &dir.join("afoot")).unwrap();
+        assert_eq!(dest, dir.join("afoot").join(binary_name()));
+        let again = place(b"second", &dir.join("afoot")).unwrap();
         assert_eq!(std::fs::read(&again).unwrap(), b"second");
         #[cfg(unix)]
         {
@@ -227,7 +227,7 @@ mod tests {
             let mode = std::fs::metadata(&again).unwrap().permissions().mode();
             assert_eq!(mode & 0o777, 0o755);
         }
-        let left: Vec<_> = std::fs::read_dir(dir.join("af"))
+        let left: Vec<_> = std::fs::read_dir(dir.join("afoot"))
             .unwrap()
             .map(|e| e.unwrap().file_name())
             .collect();

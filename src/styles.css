@@ -1415,7 +1415,7 @@ svg.eq-icon {
   overflow-wrap: anywhere;
 }
 
-/* ---- Agents (coding-agent usage, read from the `af` CLI) ------------------ */
+/* ---- Agents (coding-agent usage, read from the `afoot` CLI) ------------------ */
 
 :root {
   /* One colour per kind of token, the same five in the bar and its legend,
@@ -1602,13 +1602,13 @@ svg.eq-icon {
   margin: 4px 0 0;
 }
 
-.af-reason,
-.af-output {
+.afoot-reason,
+.afoot-output {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
-.af-output {
+.afoot-output {
   margin: 6px 0 0;
   padding: 8px;
   max-height: 160px;

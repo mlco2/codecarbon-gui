@@ -6,7 +6,7 @@
 
 use tauri::{AppHandle, Manager};
 
-use crate::af;
+use crate::afoot;
 use crate::controller::{self, AppCore};
 use crate::error::AppError;
 use crate::history::{self, Equivalent, Session};
@@ -220,53 +220,55 @@ pub async fn install_update(app: AppHandle) -> CmdResult<()> {
     crate::updater::start_install(&app)
 }
 
-// --- Coding agents (`af`, see af.rs) ---------------------------------------
+// --- Coding agents (`afoot`, see afoot.rs) ---------------------------------------
 
-/// `af status`: is `af` there, is its collector running, are the agents
-/// configured. Read-only. A missing or failing `af` is an [`af::Outcome`],
+/// `afoot status`: is `afoot` there, is its collector running, are the agents
+/// configured. Read-only. A missing or failing `afoot` is an [`afoot::Outcome`],
 /// not an error.
 #[tauri::command]
-pub async fn af_status(app: AppHandle) -> CmdResult<af::Outcome<af::Status>> {
-    Ok(af::status(&app).await)
+pub async fn afoot_status(app: AppHandle) -> CmdResult<afoot::Outcome<afoot::Status>> {
+    Ok(afoot::status(&app).await)
 }
 
-/// `af summary` for `period` ("today", "7d", "30d"); `utc_offset_minutes`
+/// `afoot summary` for `period` ("today", "7d", "30d"); `utc_offset_minutes`
 /// is the panel's offset east of UTC, where its days start. Read-only.
 #[tauri::command]
-pub async fn af_summary(
+pub async fn afoot_summary(
     app: AppHandle,
-    period: af::Period,
+    period: afoot::Period,
     utc_offset_minutes: i32,
-) -> CmdResult<af::Outcome<af::Summary>> {
-    Ok(af::summary(&app, period, utc_offset_minutes).await)
+) -> CmdResult<afoot::Outcome<afoot::Summary>> {
+    Ok(afoot::summary(&app, period, utc_offset_minutes).await)
 }
 
-/// "Install af" button: the pinned, checksum-verified release.
+/// "Install afoot" button: the pinned, checksum-verified release.
 #[tauri::command]
-pub async fn af_install(app: AppHandle) -> CmdResult<af::Outcome<af::ActionOutput>> {
-    Ok(af::install(&app).await)
+pub async fn afoot_install(app: AppHandle) -> CmdResult<afoot::Outcome<afoot::ActionOutput>> {
+    Ok(afoot::install(&app).await)
 }
 
-/// "Install the service" button: `af service install`.
+/// "Install the service" button: `afoot service install`.
 #[tauri::command]
-pub async fn af_install_service(app: AppHandle) -> CmdResult<af::Outcome<af::ActionOutput>> {
-    Ok(af::act(&app, af::Action::InstallService).await)
+pub async fn afoot_install_service(
+    app: AppHandle,
+) -> CmdResult<afoot::Outcome<afoot::ActionOutput>> {
+    Ok(afoot::act(&app, afoot::Action::InstallService).await)
 }
 
-/// "Configure agents" button: `af setup --yes --global`.
+/// "Configure agents" button: `afoot setup --yes --global`.
 #[tauri::command]
-pub async fn af_setup_agents(app: AppHandle) -> CmdResult<af::Outcome<af::ActionOutput>> {
-    Ok(af::act(&app, af::Action::SetupAgents).await)
+pub async fn afoot_setup_agents(app: AppHandle) -> CmdResult<afoot::Outcome<afoot::ActionOutput>> {
+    Ok(afoot::act(&app, afoot::Action::SetupAgents).await)
 }
 
-/// "Set up estimates" button: `af python setup`.
+/// "Set up estimates" button: `afoot python setup`.
 #[tauri::command]
-pub async fn af_setup_python(app: AppHandle) -> CmdResult<af::Outcome<af::ActionOutput>> {
-    Ok(af::act(&app, af::Action::SetupPython).await)
+pub async fn afoot_setup_python(app: AppHandle) -> CmdResult<afoot::Outcome<afoot::ActionOutput>> {
+    Ok(afoot::act(&app, afoot::Action::SetupPython).await)
 }
 
-/// "Update af" button: `af self update`.
+/// "Update afoot" button: `afoot self update`.
 #[tauri::command]
-pub async fn af_self_update(app: AppHandle) -> CmdResult<af::Outcome<af::ActionOutput>> {
-    Ok(af::act(&app, af::Action::SelfUpdate).await)
+pub async fn afoot_self_update(app: AppHandle) -> CmdResult<afoot::Outcome<afoot::ActionOutput>> {
+    Ok(afoot::act(&app, afoot::Action::SelfUpdate).await)
 }

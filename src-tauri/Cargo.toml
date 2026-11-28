@@ -31,7 +31,7 @@ env_logger = "0.11"
 # Already used by Tauri (its async runtime); we need its timer (restart
 # back-off, quit time-outs) and Unix signal handling (graceful quit on SIGTERM).
 tokio = { version = "1", features = ["time", "signal", "macros"] }
-# The pinned `af` release (af_release.rs): downloaded over https and checked
+# The pinned `afoot` release (afoot_release.rs): downloaded over https and checked
 # against its SHA-256. All three are already in the tree through Tauri's
 # updater plugin, with the same TLS setup (rustls, ring).
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }

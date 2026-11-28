@@ -3,19 +3,19 @@
  * again and is authoritative; the checks here only give instant feedback.
  */
 import {
-  afSelfUpdate,
-  afStatus,
+  afootSelfUpdate,
+  afootStatus,
   errorMessage,
   getSettings,
   saveSettings,
-  type AfActionOutput,
-  type AfOutcome,
-  type AfStatus,
+  type AfootActionOutput,
+  type AfootOutcome,
+  type AfootStatus,
   type ApiSettings,
   type Settings,
   type TrackerState,
 } from "../api";
-import { afUpdateRow, problem, problemText, settled } from "../agents";
+import { afootUpdateRow, problem, problemText, settled } from "../agents";
 import { h, setText, show, spinner } from "../dom";
 import {
   live,
@@ -122,15 +122,15 @@ function optionalText(input: HTMLInputElement): string | null {
 }
 
 /**
- * Settings → Updates: the version of `af` (the CLI behind the Agents view)
- * and "Update af", which runs `af self update` on a click. Enabled only
- * when `af` says it manages its own install; hidden until `af` answered.
+ * Settings → Updates: the version of `afoot` (the CLI behind the Agents view)
+ * and "Update afoot", which runs `afoot self update` on a click. Enabled only
+ * when `afoot` says it manages its own install; hidden until `afoot` answered.
  */
-class AfRow {
-  readonly root = h("div", { class: "af-row", hidden: true });
-  private status: AfOutcome<AfStatus> | null = null;
+class AfootRow {
+  readonly root = h("div", { class: "afoot-row", hidden: true });
+  private status: AfootOutcome<AfootStatus> | null = null;
   private updating = false;
-  private result: AfOutcome<AfActionOutput> | null = null;
+  private result: AfootOutcome<AfootActionOutput> | null = null;
   private readonly line = h("span", {});
   private readonly button = h("button", { class: "btn btn-small", type: "button" });
   private readonly note = h("p", { class: "muted small" });
@@ -139,27 +139,27 @@ class AfRow {
   constructor() {
     this.button.addEventListener("click", () => void this.update());
     this.root.append(
-      h("div", { class: "af-row-head" }, this.line, this.button),
+      h("div", { class: "afoot-row-head" }, this.line, this.button),
       this.note,
       this.message,
     );
   }
 
-  /** Settings was opened: ask `af status` (read-only). */
+  /** Settings was opened: ask `afoot status` (read-only). */
   async load(): Promise<void> {
     this.result = null;
-    this.status = await settled(afStatus());
+    this.status = await settled(afootStatus());
     this.render();
   }
 
   render(): void {
     if (!this.status) return;
-    const row = afUpdateRow(this.status);
+    const row = afootUpdateRow(this.status);
     show(this.root, row.visible);
     setText(this.line, row.line);
     show(this.button, row.showButton);
     this.button.disabled = !row.canUpdate || this.updating;
-    this.button.replaceChildren(...(this.updating ? [spinner()] : []), t("settings.af_update"));
+    this.button.replaceChildren(...(this.updating ? [spinner()] : []), t("settings.afoot_update"));
     setText(this.note, row.note ?? "");
     show(this.note, row.note !== null);
     const failed = this.result ? problem(this.result) : null;
@@ -181,10 +181,10 @@ class AfRow {
     this.updating = true;
     this.result = null;
     this.render();
-    this.result = await settled(afSelfUpdate());
+    this.result = await settled(afootSelfUpdate());
     this.updating = false;
     // The version may have changed.
-    this.status = await settled(afStatus());
+    this.status = await settled(afootStatus());
     this.render();
   }
 }
@@ -273,7 +273,7 @@ export class SettingsView {
     { class: "muted small", hidden: true },
     live("settings.updates_not_configured"),
   );
-  private readonly af = new AfRow();
+  private readonly afoot = new AfootRow();
 
   constructor() {
     const f = this.fields;
@@ -320,7 +320,7 @@ export class SettingsView {
         h("legend", { class: "card-title" }, live("settings.updates")),
         f.check_updates.row,
         this.updatesUnavailable,
-        this.af.root,
+        this.afoot.root,
       ),
       h(
         "fieldset",
@@ -389,7 +389,7 @@ export class SettingsView {
     }
     this.setMessage(this.messageText, this.message.classList.contains("error"));
     this.account.relocalize();
-    this.af.render();
+    this.afoot.render();
   }
 
   /** The Language select: applied to the panel at once, then saved (Rust relabels the tray). */
@@ -421,7 +421,7 @@ export class SettingsView {
 
   /** Reload from disk every time the view is shown. */
   async load(): Promise<void> {
-    void this.af.load();
+    void this.afoot.load();
     try {
       this.loaded = await getSettings();
       this.write(this.loaded);

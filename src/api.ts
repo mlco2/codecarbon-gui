@@ -282,13 +282,13 @@ export interface HistoryPayload {
   path: string;
 }
 
-// --- Coding agents, read from the `af` CLI (af.rs, docs/AF.md) ----------------
+// --- Coding agents, read from the `afoot` CLI (afoot.rs, docs/AFOOT.md) ----------------
 
 /**
- * What running `af` gave. Everything but "ok" is explained to the user
+ * What running `afoot` gave. Everything but "ok" is explained to the user
  * (agents.ts); "not_found" is a normal state, not an error.
  */
-export type AfOutcome<T> =
+export type AfootOutcome<T> =
   | { outcome: "ok"; data: T }
   | { outcome: "not_found" }
   | { outcome: "spawn_failed"; detail: string }
@@ -299,7 +299,7 @@ export type AfOutcome<T> =
   /** Another action is still running: this one was not started. */
   | { outcome: "busy" };
 
-export interface AfAgentStatus {
+export interface AfootAgentStatus {
   /** "claude-code", "codex", … */
   id: string;
   name: string;
@@ -308,23 +308,23 @@ export interface AfAgentStatus {
    * "not_configured", "not_installed", "unknown" (or a state added since).
    */
   state: string;
-  /** In `af`'s words (English). */
+  /** In `afoot`'s words (English). */
   detail: string | null;
   action: string | null;
 }
 
-/** `af status`, the fields the panel uses. */
-export interface AfStatus {
-  af_version: string;
-  /** `af self update` manages this binary (a release install). */
+/** `afoot status`, the fields the panel uses. */
+export interface AfootStatus {
+  afoot_version: string;
+  /** `afoot self update` manages this binary (a release install). */
   self_update: { managed: boolean };
   service: { supported: boolean; installed: boolean };
   receiver: { endpoint: string; reachable: boolean; note: string | null };
   /** `running` is null where it cannot be asked. */
   collector: { running: boolean | null };
   /**
-   * `af`'s own Python runtime, needed for the impact estimates (null from
-   * an `af` that does not report it). `provisioner` null: neither uv nor a
+   * `afoot`'s own Python runtime, needed for the impact estimates (null from
+   * an `afoot` that does not report it). `provisioner` null: neither uv nor a
    * usable Python is installed, and uv is the thing to install.
    */
   python?: {
@@ -334,11 +334,11 @@ export interface AfStatus {
     provisioner: string | null;
     uv_install_url: string | null;
   } | null;
-  agents: AfAgentStatus[];
+  agents: AfootAgentStatus[];
 }
 
 /** Measured: as reported by the agents. */
-export interface AfTokens {
+export interface AfootTokens {
   input: number;
   output: number;
   thought: number;
@@ -348,15 +348,15 @@ export interface AfTokens {
 }
 
 /** A modelled impact: always a range. */
-export interface AfImpact {
+export interface AfootImpact {
   unit: string;
   total: { min: number; max: number };
 }
 
-export interface AfFigures {
+export interface AfootFigures {
   calls: number;
   sessions: number;
-  tokens: AfTokens;
+  tokens: AfootTokens;
   /** Calls whose impacts are in `remote`. */
   estimated_calls: number;
   unestimated_calls: number;
@@ -365,10 +365,10 @@ export interface AfFigures {
    * Modelled impacts of the remote inference, summed over
    * `estimated_calls` only. Keys: energy (kWh), gwp (kgCO2eq), water, adpe, pe.
    */
-  remote: Record<string, AfImpact>;
+  remote: Record<string, AfootImpact>;
 }
 
-export interface AfNotEstimated {
+export interface AfootNotEstimated {
   agent: string;
   model: string;
   /** The estimator's status, e.g. "unknown_model". */
@@ -377,26 +377,26 @@ export interface AfNotEstimated {
   tokens: number;
 }
 
-export type AfPeriod = "today" | "7d" | "30d";
+export type AfootPeriod = "today" | "7d" | "30d";
 
-/** `af summary` (schemas/summary/v1.schema.json in agentic-footprint). */
-export interface AfSummary {
-  af_version: string;
+/** `afoot summary` (schemas/summary/v1.schema.json in agentic-footprint). */
+export interface AfootSummary {
+  afoot_version: string;
   generated_at: string;
   period: { name: string; from: string; to: string; utc_offset_minutes: number };
   collector: { running: boolean | null; last_event_at: string | null };
-  totals: AfFigures;
+  totals: AfootFigures;
   /** Largest token total first. */
-  by_agent: (AfFigures & { agent: string; name: string })[];
-  by_model: (AfFigures & { agent: string; model: string })[];
+  by_agent: (AfootFigures & { agent: string; name: string })[];
+  by_model: (AfootFigures & { agent: string; model: string })[];
   /** Counted in the tokens, in no `remote` sum. */
-  models_not_estimated: AfNotEstimated[];
+  models_not_estimated: AfootNotEstimated[];
   /** Every local day of the period ("YYYY-MM-DD"), oldest first. */
-  by_day: (AfFigures & { date: string })[];
+  by_day: (AfootFigures & { date: string })[];
 }
 
 /** What an action printed. */
-export interface AfActionOutput {
+export interface AfootActionOutput {
   output: string;
 }
 
@@ -456,34 +456,34 @@ export const accountSelectExperiment = (
 ): Promise<void> =>
   invoke("account_select_experiment", { organizationId, projectId, experimentId });
 
-/** `af status`. Read-only. */
-export const afStatus = (): Promise<AfOutcome<AfStatus>> =>
-  invoke<AfOutcome<AfStatus>>("af_status");
-/** `af summary`; days are cut at `utcOffsetMinutes` east of UTC. Read-only. */
-export const afSummary = (
-  period: AfPeriod,
+/** `afoot status`. Read-only. */
+export const afootStatus = (): Promise<AfootOutcome<AfootStatus>> =>
+  invoke<AfootOutcome<AfootStatus>>("afoot_status");
+/** `afoot summary`; days are cut at `utcOffsetMinutes` east of UTC. Read-only. */
+export const afootSummary = (
+  period: AfootPeriod,
   utcOffsetMinutes: number,
-): Promise<AfOutcome<AfSummary>> =>
-  invoke<AfOutcome<AfSummary>>("af_summary", { period, utcOffsetMinutes });
+): Promise<AfootOutcome<AfootSummary>> =>
+  invoke<AfootOutcome<AfootSummary>>("afoot_summary", { period, utcOffsetMinutes });
 // The ones below change the user's machine: call them from a click only.
 /**
- * Download the `af` release this app pins, check it against its hash, and
+ * Download the `afoot` release this app pins, check it against its hash, and
  * put it in the app's own folder.
  */
-export const afInstall = (): Promise<AfOutcome<AfActionOutput>> =>
-  invoke<AfOutcome<AfActionOutput>>("af_install");
-/** `af service install`. */
-export const afInstallService = (): Promise<AfOutcome<AfActionOutput>> =>
-  invoke<AfOutcome<AfActionOutput>>("af_install_service");
-/** `af setup --yes --global`: edits the agents' own configuration files. */
-export const afSetupAgents = (): Promise<AfOutcome<AfActionOutput>> =>
-  invoke<AfOutcome<AfActionOutput>>("af_setup_agents");
-/** `af python setup`: `af` builds the Python runtime its estimates need. */
-export const afSetupPython = (): Promise<AfOutcome<AfActionOutput>> =>
-  invoke<AfOutcome<AfActionOutput>>("af_setup_python");
-/** `af self update`: `af` downloads and verifies its own release. */
-export const afSelfUpdate = (): Promise<AfOutcome<AfActionOutput>> =>
-  invoke<AfOutcome<AfActionOutput>>("af_self_update");
+export const afootInstall = (): Promise<AfootOutcome<AfootActionOutput>> =>
+  invoke<AfootOutcome<AfootActionOutput>>("afoot_install");
+/** `afoot service install`. */
+export const afootInstallService = (): Promise<AfootOutcome<AfootActionOutput>> =>
+  invoke<AfootOutcome<AfootActionOutput>>("afoot_install_service");
+/** `afoot setup --yes --global`: edits the agents' own configuration files. */
+export const afootSetupAgents = (): Promise<AfootOutcome<AfootActionOutput>> =>
+  invoke<AfootOutcome<AfootActionOutput>>("afoot_setup_agents");
+/** `afoot python setup`: `afoot` builds the Python runtime its estimates need. */
+export const afootSetupPython = (): Promise<AfootOutcome<AfootActionOutput>> =>
+  invoke<AfootOutcome<AfootActionOutput>>("afoot_setup_python");
+/** `afoot self update`: `afoot` downloads and verifies its own release. */
+export const afootSelfUpdate = (): Promise<AfootOutcome<AfootActionOutput>> =>
+  invoke<AfootOutcome<AfootActionOutput>>("afoot_self_update");
 
 /** Called with the full state after every change on the Rust side. */
 export function onState(callback: (state: TrackerState) => void): Promise<UnlistenFn> {

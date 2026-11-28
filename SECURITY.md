@@ -14,32 +14,32 @@ reports within a week.
 
 * It runs two processes: the Tauri shell and the `codecarbon-agent` sidecar
   (a frozen Python program). They talk over stdin/stdout only.
-* **A third program, `af`, only on demand.** The *Agents* view shows what
+* **A third program, `afoot`, only on demand.** The *Agents* view shows what
   coding agents (Claude Code, Codex) use, read from
-  [`af`](https://github.com/mlco2/agentic-footprint) when it is installed on
-  the computer. The app starts `af` as a short-lived process, reads the JSON
-  it prints, and nothing else (see [docs/AF.md](docs/AF.md)):
-  * `af status` and `af summary` while the Agents view is open (and
-    `af status` when Settings is opened). Both only read.
-  * `af service install`, `af setup --yes --global`, `af python setup` and
-    `af self update`, each only when the user clicks its button. These change the computer,
-    and it is `af` that makes the changes: a per-user background service
+  [`afoot`](https://github.com/mlco2/agentic-footprint) when it is installed on
+  the computer. The app starts `afoot` as a short-lived process, reads the JSON
+  it prints, and nothing else (see [docs/AFOOT.md](docs/AFOOT.md)):
+  * `afoot status` and `afoot summary` while the Agents view is open (and
+    `afoot status` when Settings is opened). Both only read.
+  * `afoot service install`, `afoot setup --yes --global`, `afoot python setup` and
+    `afoot self update`, each only when the user clicks its button. These change the computer,
+    and it is `afoot` that makes the changes: a per-user background service
     (launchd / systemd) that receives the agents' usage, the agents' own
     settings files (`~/.claude/settings.json`, Codex's `config.toml`) so that
-    they send it, and `af`'s own state folder (including, for
-    `af python setup`, a Python environment whose packages `af` downloads
+    they send it, and `afoot`'s own state folder (including, for
+    `afoot python setup`, a Python environment whose packages `afoot` downloads
     with uv or pip).
-  * That background service belongs to `af`: the app does not start, stop or
+  * That background service belongs to `afoot`: the app does not start, stop or
     supervise it, and it keeps running when the app is closed.
-  * **Installing `af`.** When no `af` is found, the view offers *Install
-    af*. Only on that click, the app downloads one file over https, from
+  * **Installing `afoot`.** When no `afoot` is found, the view offers *Install
+    afoot*. Only on that click, the app downloads one file over https, from
     `https://github.com/mlco2/agentic-footprint/releases/download/`: the
-    `af` binary of the single release this version of the app pins. The
+    `afoot` binary of the single release this version of the app pins. The
     file is compared with a SHA-256 written in the app's source
-    (`src-tauri/src/af_release.rs`); if it differs, nothing is installed.
-    It is placed where `af`'s own installer puts it (`~/.local/bin/af`;
-    `%LOCALAPPDATA%\Programs\agentic-footprint\af.exe` on Windows), so
-    the app and a terminal use the same file. Later versions come from `af self update`, which verifies the Sigstore
+    (`src-tauri/src/afoot_release.rs`); if it differs, nothing is installed.
+    It is placed where `afoot`'s own installer puts it (`~/.local/bin/afoot`;
+    `%LOCALAPPDATA%\Programs\agentic-footprint\afoot.exe` on Windows), so
+    the app and a terminal use the same file. Later versions come from `afoot self update`, which verifies the Sigstore
     signature of what it downloads.
 * **Network access**: one geolocation request at the start of a measurement
   when no country is set in Settings, and uploads when the user enables the
@@ -48,12 +48,12 @@ reports within a week.
   shortly after launch and then once a day: on by default, off with
   *Settings → Updates*; the download itself only when the user clicks
   **Install**. There is no telemetry and no remote code other than signed
-  updates (below). `af self update`, when the user clicks *Update af*, is
-  `af` contacting GitHub for its own release and verifying that release's
+  updates (below). `afoot self update`, when the user clicks *Update afoot*, is
+  `afoot` contacting GitHub for its own release and verifying that release's
   checksum and Sigstore signature itself; the app takes no part in it.
 * **Files written**: `settings.json` in the app's config folder,
   `measurements/emissions.csv` in its data folder, and the WebView's cache.
-  (What `af` writes when asked to is listed above.)
+  (What `afoot` writes when asked to is listed above.)
 * **Privileges**: none. The app runs as the user and never asks for
   administrator rights; RAPL / `powermetrics` measurements are used only
   when the system already exposes them.

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  afUpdateRow,
+  afootUpdateRow,
   agentStateLabel,
   count,
   coverage,
@@ -17,11 +17,11 @@ import {
   tokenSplit,
   utcOffsetMinutes,
 } from "./agents";
-import type { AfFigures, AfOutcome, AfStatus, AfSummary } from "./api";
+import type { AfootFigures, AfootOutcome, AfootStatus, AfootSummary } from "./api";
 import { setLocale } from "./i18n/i18n";
 
-// Hand-written to follow af's schema; never copied from a real machine.
-const figures = (over: Partial<AfFigures> = {}): AfFigures => ({
+// Hand-written to follow afoot's schema; never copied from a real machine.
+const figures = (over: Partial<AfootFigures> = {}): AfootFigures => ({
   calls: 10,
   sessions: 2,
   tokens: { input: 1000, output: 200, thought: 0, cache_read: 8000, cache_write: 800, total: 10000 },
@@ -35,8 +35,8 @@ const figures = (over: Partial<AfFigures> = {}): AfFigures => ({
   ...over,
 });
 
-const status = (over: Partial<AfStatus> = {}): AfStatus => ({
-  af_version: "0.1.0",
+const status = (over: Partial<AfootStatus> = {}): AfootStatus => ({
+  afoot_version: "0.1.0",
   self_update: { managed: false },
   service: { supported: true, installed: true },
   receiver: { endpoint: "http://127.0.0.1:4318/v1/logs", reachable: true, note: null },
@@ -48,8 +48,8 @@ const status = (over: Partial<AfStatus> = {}): AfStatus => ({
   ...over,
 });
 
-const summary = (over: Partial<AfSummary> = {}): AfSummary => ({
-  af_version: "0.1.0",
+const summary = (over: Partial<AfootSummary> = {}): AfootSummary => ({
+  afoot_version: "0.1.0",
   generated_at: "2026-01-02T10:00:00.000Z",
   period: { name: "today", from: "2026-01-02T00:00:00.000Z", to: "2026-01-02T10:00:00.000Z", utc_offset_minutes: 0 },
   collector: { running: true, last_event_at: "2026-01-02T09:59:00.000Z" },
@@ -61,7 +61,7 @@ const summary = (over: Partial<AfSummary> = {}): AfSummary => ({
   ...over,
 });
 
-const ok = <T>(data: T): AfOutcome<T> => ({ outcome: "ok", data });
+const ok = <T>(data: T): AfootOutcome<T> => ({ outcome: "ok", data });
 
 afterEach(() => setLocale("en"));
 
@@ -127,7 +127,7 @@ describe("what the view shows", () => {
     expect(screen(ok(status()), null).kind).toBe("loading");
   });
 
-  it("explains an af that is missing, too old or broken, each differently", () => {
+  it("explains an afoot that is missing, too old or broken, each differently", () => {
     expect(screen({ outcome: "not_found" }, ok(summary()))).toEqual({
       kind: "problem",
       problem: { kind: "not_found" },
@@ -136,11 +136,11 @@ describe("what the view shows", () => {
     expect(unsupported?.kind).toBe("unsupported");
     expect(problem({ outcome: "timed_out", seconds: 10 })).toEqual({
       kind: "failed",
-      text: "af did not answer within 10 s.",
+      text: "afoot did not answer within 10 s.",
     });
     expect(problem({ outcome: "failed", exit_code: 3, detail: "" })).toEqual({
       kind: "failed",
-      text: "af stopped with code 3: it gave no reason",
+      text: "afoot stopped with code 3: it gave no reason",
     });
     expect(problem(ok(1))).toBeNull();
   });
@@ -161,7 +161,7 @@ describe("what keeps usage from being recorded", () => {
     expect(s.agents.map((a) => a.id)).toEqual(["claude-code"]);
   });
 
-  it("offers the service only where af can install one", () => {
+  it("offers the service only where afoot can install one", () => {
     const off = { endpoint: "x", reachable: false, note: "connection refused" };
     const missing = setup(status({ receiver: off, service: { supported: true, installed: false } }));
     expect([missing.collector, missing.offerService]).toEqual(["service_missing", true]);
@@ -186,17 +186,17 @@ describe("the runtime the estimates need", () => {
   const runtime = (provisioner: string | null) => ({
     ready: false,
     problem: "venv directory missing",
-    fix: "run `af python setup`",
+    fix: "run `afoot python setup`",
     provisioner,
     uv_install_url: "https://docs.astral.sh/uv/getting-started/installation/",
   });
 
-  it("is not mentioned when it is ready, or when af does not report it", () => {
+  it("is not mentioned when it is ready, or when afoot does not report it", () => {
     expect(setup(status()).estimates).toBe("ok");
     expect(setup(status({ python: null })).estimates).toBe("ok");
   });
 
-  it("is offered when af can build it, and uv is recommended when nothing can", () => {
+  it("is offered when afoot can build it, and uv is recommended when nothing can", () => {
     const can = setup(status({ python: runtime("uv") }));
     expect([can.estimates, can.needsAttention]).toEqual(["setup", true]);
     const cannot = setup(status({ python: runtime(null) }));
@@ -210,7 +210,7 @@ describe("the runtime the estimates need", () => {
   });
 });
 
-describe("when af status is read again", () => {
+describe("when afoot status is read again", () => {
   it("keeps a good answer between refreshes, and retries a failed one", () => {
     expect(statusIsDue(ok(status()), false)).toBe(false);
     expect(statusIsDue(ok(status()), true)).toBe(true);
@@ -220,19 +220,19 @@ describe("when af status is read again", () => {
   });
 });
 
-describe("Settings → Updates: af", () => {
-  it("enables the update only for an af that updates itself", () => {
-    expect(afUpdateRow(ok(status())).canUpdate).toBe(false);
-    const managed = afUpdateRow(ok(status({ self_update: { managed: true } })));
-    expect([managed.line, managed.showButton, managed.canUpdate]).toEqual(["af 0.1.0", true, true]);
-    const missing = afUpdateRow({ outcome: "not_found" });
+describe("Settings → Updates: afoot", () => {
+  it("enables the update only for an afoot that updates itself", () => {
+    expect(afootUpdateRow(ok(status())).canUpdate).toBe(false);
+    const managed = afootUpdateRow(ok(status({ self_update: { managed: true } })));
+    expect([managed.line, managed.showButton, managed.canUpdate]).toEqual(["afoot 0.1.0", true, true]);
+    const missing = afootUpdateRow({ outcome: "not_found" });
     expect([missing.showButton, missing.visible]).toEqual([false, false]);
     expect(managed.visible).toBe(true);
-    // Any other failure is shown: there is an af, and it did not answer.
-    const hung = afUpdateRow({ outcome: "timed_out", seconds: 10 });
-    expect([hung.visible, hung.line]).toEqual([true, "af did not answer within 10 s."]);
-    const busy = afUpdateRow({ outcome: "busy" });
-    expect(busy.line).toBe("af is busy with another action. Try again when it is done.");
+    // Any other failure is shown: there is an afoot, and it did not answer.
+    const hung = afootUpdateRow({ outcome: "timed_out", seconds: 10 });
+    expect([hung.visible, hung.line]).toEqual([true, "afoot did not answer within 10 s."]);
+    const busy = afootUpdateRow({ outcome: "busy" });
+    expect(busy.line).toBe("afoot is busy with another action. Try again when it is done.");
   });
 });
 
@@ -246,7 +246,7 @@ describe("in French", () => {
   });
 });
 
-describe("the UTC offset sent to af", () => {
+describe("the UTC offset sent to afoot", () => {
   it("is minutes east of UTC", () => {
     const at = (offset: number) => ({ getTimezoneOffset: () => offset }) as Date;
     expect(utcOffsetMinutes(at(-60))).toBe(60);
