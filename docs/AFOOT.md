@@ -1,28 +1,28 @@
-# Coding-agent usage (app → `af`)
+# Coding-agent usage (app → `afoot`)
 
-The *Agents* view shows what coding agents (Claude Code, Codex) use: tokens,
-and an estimate of the impact of the remote inference. The numbers come from
-[`af`](https://github.com/mlco2/agentic-footprint) (agentic-footprint), a
+The *Agents* view shows what coding agents (Claude Code, Codex, OpenCode, Pi:
+the ones `afoot` reports) use: tokens, and an estimate of the impact of the remote inference. The numbers come from
+[`afoot`](https://github.com/mlco2/agentic-footprint) (agentic-footprint), a
 separate command-line tool with its own background collector. The app never
-reads `af`'s files: it runs `af` and reads the JSON it prints
-(`src-tauri/src/af.rs`). The panel does no I/O; it asks the Rust side.
+reads `afoot`'s files: it runs `afoot` and reads the JSON it prints
+(`src-tauri/src/afoot.rs`). The panel does no I/O; it asks the Rust side.
 
-## Where `af` is looked for
+## Where `afoot` is looked for
 
 `PATH`, then the folders user tools are installed to (`~/.local/bin`,
 `~/.cargo/bin`, Homebrew's: an app started from the Dock does not get the
-shell's `PATH`), then the folder `af`'s installers use
+shell's `PATH`), then the folder `afoot`'s installers use
 (`%LOCALAPPDATA%\Programs\agentic-footprint` on Windows). Not found is a normal state: the view explains it and
-offers *Install af*.
+offers *Install afoot*.
 
-## Installing af
+## Installing afoot
 
-*Install af* downloads the `af` binary of one release, pinned in
-`src-tauri/src/af_release.rs` with the SHA-256 of the file for each platform
+*Install afoot* downloads the `afoot` binary of one release, pinned in
+`src-tauri/src/afoot_release.rs` with the SHA-256 of the file for each platform
 (macOS arm64 and x86-64, Linux x86-64, Windows x86-64). A download that does
-not match its hash is discarded. The binary goes where `af`'s own installer
-puts a release binary, and the app then runs `af self record-install`, as
-the installer does, so that `af self update` manages it from then on. The
+not match its hash is discarded. The binary goes where `afoot`'s own installer
+puts a release binary, and the app then runs `afoot self record-install`, as
+the installer does, so that `afoot self update` manages it from then on. The
 result is the installer's, with two differences for now: the folder is not
 added to the user's `PATH` when it is missing from it, and the installer's
 next steps (Python runtime, background service, agent configuration) are
@@ -35,36 +35,36 @@ release's `SHA256SUMS`); the tests check their form.
 
 | Command | When | Changes the computer |
 | --- | --- | --- |
-| `af status` | Agents view opened, after an action, Settings opened | no |
-| `af summary --period today\|7d\|30d --utc-offset-minutes N` | Agents view opened, then every 30 s while it is on screen | no |
-| `af service install` | *Install the service* clicked | yes: a per-user background service |
-| `af setup --yes --global` | *Configure agents* clicked | yes: the agents' own settings files |
-| `af python setup` | *Set up estimates* clicked | yes: `af`'s own Python environment, in its state folder (downloads packages) |
-| `af self update` | *Update af* clicked (Settings → Updates) | yes: replaces `af` with its latest release |
+| `afoot status` | Agents view opened, after an action, Settings opened | no |
+| `afoot summary --period today\|7d\|30d --utc-offset-minutes N` | Agents view opened, then every 30 s while it is on screen | no |
+| `afoot service install` | *Install the service* clicked | yes: a per-user background service |
+| `afoot setup --yes --global` | *Configure agents* clicked | yes: the agents' own settings files, and the OpenCode plugin and Pi extension files |
+| `afoot python setup` | *Set up estimates* clicked | yes: `afoot`'s own Python environment, in its state folder (downloads packages) |
+| `afoot self update` | *Update afoot* clicked (Settings → Updates) | yes: replaces `afoot` with its latest release |
 
 Every run has a time limit (10 s for the two reads, 60 s for the first two
 actions, 5 min for the two that download) and a limit on how much output is kept.
 
-`af` is started with the app's `PATH` plus the usual places user tools are
+`afoot` is started with the app's `PATH` plus the usual places user tools are
 installed to (`~/.local/bin`, `~/.cargo/bin`, Homebrew's), because an app
-started from the Dock does not have them and `af` looks for `uv` there.
+started from the Dock does not have them and `afoot` looks for `uv` there.
 
-When `af status` says its Python runtime is missing and that nothing on the
+When `afoot status` says its Python runtime is missing and that nothing on the
 computer can build it (no `uv`, no usable Python), the view links to uv's
 install instructions: uv brings the right Python with it. The app installs
 neither.
 
 ## The contract
 
-`af status` and `af summary` each print one JSON document with
-`protocol_version` (currently `1` for both). `af summary` is specified by
+`afoot status` and `afoot summary` each print one JSON document with
+`protocol_version` (currently `1` for both). `afoot summary` is specified by
 `schemas/summary/v1.schema.json` in the agentic-footprint repository.
 
-* Unknown fields are ignored, so `af` can add fields without breaking the app.
-* Another `protocol_version` means "this `af` is not supported by this
+* Unknown fields are ignored, so `afoot` can add fields without breaking the app.
+* Another `protocol_version` means "this `afoot` is not supported by this
   version of the app"; the view says so instead of guessing.
 * The three actions have no JSON result: the app uses the exit code and shows
-  what `af` printed.
+  what `afoot` printed.
 
 ## What the view shows, and what it does not
 
@@ -82,7 +82,7 @@ neither.
 
 | Outcome (Rust → panel) | Meaning |
 | --- | --- |
-| `not_found` | no `af` on this computer |
+| `not_found` | no `afoot` on this computer |
 | `spawn_failed` | found, but it could not be started |
 | `timed_out` | it did not answer in time (it is stopped) |
 | `failed` | it exited with an error; its message is shown |

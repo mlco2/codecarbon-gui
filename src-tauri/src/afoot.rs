@@ -1,20 +1,20 @@
-//! Coding-agent usage, read from `af` (agentic-footprint), a separate
-//! command-line tool the user installs (docs/AF.md).
+//! Coding-agent usage, read from `afoot` (agentic-footprint), a separate
+//! command-line tool the user installs (docs/AFOOT.md).
 //!
-//! * `af` is looked up in `PATH`, then in `~/.local/bin` (its installer's
+//! * `afoot` is looked up in `PATH`, then in `~/.local/bin` (its installer's
 //!   default; an app started from the Dock or a launcher does not get the
 //!   shell's `PATH`). Not finding it is a normal state, not an error.
-//! * Each call starts one short-lived `af` process with a hard time-out
+//! * Each call starts one short-lived `afoot` process with a hard time-out
 //!   and reads its stdout: one JSON document carrying `protocol_version`.
 //!   Every way this can go wrong is its own [`Outcome`], which the panel
 //!   explains (the texts are in `src/i18n`).
-//! * `af status` and `af summary` only read. The three actions
+//! * `afoot status` and `afoot summary` only read. The three actions
 //!   ([`Action`]) change the user's machine: they run from a button click
 //!   only, never by themselves.
-//! * `af` has its own background service (the collector). This app never
+//! * `afoot` has its own background service (the collector). This app never
 //!   starts, stops or supervises it.
 //!
-//! This version does not download `af`: see [`locate`].
+//! This version does not download `afoot`: see [`locate`].
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -28,39 +28,39 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tauri::{async_runtime, AppHandle, Manager};
 
-/// The `protocol_version` of `af status` and `af summary` this app reads.
+/// The `protocol_version` of `afoot status` and `afoot summary` this app reads.
 pub const PROTOCOL_VERSION: u64 = 1;
 
 /// The executable's file name.
-const BINARY: &str = if cfg!(windows) { "af.exe" } else { "af" };
+const BINARY: &str = if cfg!(windows) { "afoot.exe" } else { "afoot" };
 
-/// `af status` / `af summary` answer in well under a second.
+/// `afoot status` / `afoot summary` answer in well under a second.
 const READ_TIMEOUT: Duration = Duration::from_secs(10);
-/// `af service install` and `af setup` write a few files and start a service.
+/// `afoot service install` and `afoot setup` write a few files and start a service.
 const ACTION_TIMEOUT: Duration = Duration::from_secs(60);
-/// `af self update` downloads a release.
+/// `afoot self update` downloads a release.
 const UPDATE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
-/// How often a running `af` is checked for exit.
+/// How often a running `afoot` is checked for exit.
 const POLL: Duration = Duration::from_millis(10);
-/// After `af` exited: how long its output may still take to arrive (a
+/// After `afoot` exited: how long its output may still take to arrive (a
 /// process it started can keep the pipe open; we do not wait for it).
 const DRAIN: Duration = Duration::from_secs(1);
 /// At most this much of stdout / stderr is kept (the rest is read and dropped).
 const MAX_OUTPUT: usize = 4 * 1024 * 1024;
-/// At most this many characters of `af`'s own text go to the panel (the end).
+/// At most this many characters of `afoot`'s own text go to the panel (the end).
 const MAX_TEXT: usize = 4000;
 
 /// Only one action runs at a time.
 static ACTION: Mutex<()> = Mutex::new(());
 
-/// What running `af` gave, as sent to the panel (`{"outcome": "ok", …}`).
+/// What running `afoot` gave, as sent to the panel (`{"outcome": "ok", …}`).
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "outcome", rename_all = "snake_case")]
 pub enum Outcome<T> {
     Ok {
         data: T,
     },
-    /// No `af` in `PATH` or `~/.local/bin`.
+    /// No `afoot` in `PATH` or `~/.local/bin`.
     NotFound,
     /// The file is there but could not be started (the OS's reason).
     SpawnFailed {
@@ -71,7 +71,7 @@ pub enum Outcome<T> {
         seconds: u64,
     },
     /// Non-zero exit (`exit_code` is `None` when a signal ended it);
-    /// `detail` is the end of what `af` printed.
+    /// `detail` is the end of what `afoot` printed.
     Failed {
         exit_code: Option<i32>,
         detail: String,
@@ -81,7 +81,7 @@ pub enum Outcome<T> {
         detail: String,
     },
     /// A JSON document of another `protocol_version` (`None`: it has none):
-    /// this `af` is not supported by this version of the app.
+    /// this `afoot` is not supported by this version of the app.
     UnsupportedProtocol {
         found: Option<u64>,
         supported: u64,
@@ -101,32 +101,32 @@ fn claim() -> Option<std::sync::MutexGuard<'static, ()>> {
     }
 }
 
-// --- `af status` ---------------------------------------------------------------
+// --- `afoot status` ---------------------------------------------------------------
 
-/// The fields of `af status` the panel uses. Paths and process ids, which
+/// The fields of `afoot status` the panel uses. Paths and process ids, which
 /// the document also carries, are not passed on.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Status {
-    pub af_version: String,
+    pub afoot_version: String,
     pub self_update: SelfUpdate,
     pub service: Service,
     pub receiver: Receiver,
     pub collector: StatusCollector,
-    /// Absent from an `af` that does not report it yet.
+    /// Absent from an `afoot` that does not report it yet.
     #[serde(default)]
     pub python: Option<PythonRuntime>,
     pub agents: Vec<AgentStatus>,
 }
 
-/// `af`'s own Python runtime, which its impact estimates need. Without it
+/// `afoot`'s own Python runtime, which its impact estimates need. Without it
 /// tokens are still recorded; there are no impact figures.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct PythonRuntime {
     pub ready: bool,
-    /// What is wrong and what to do, in `af`'s words.
+    /// What is wrong and what to do, in `afoot`'s words.
     pub problem: Option<String>,
     pub fix: Option<String>,
-    /// What `af python setup` would build it with here ("uv", "python");
+    /// What `afoot python setup` would build it with here ("uv", "python");
     /// `None`: neither is installed, and uv is the thing to install.
     pub provisioner: Option<String>,
     pub uv_install_url: Option<String>,
@@ -134,13 +134,13 @@ pub struct PythonRuntime {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SelfUpdate {
-    /// `af self update` manages this binary (a release install).
+    /// `afoot self update` manages this binary (a release install).
     pub managed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Service {
-    /// This system has a per-user service manager `af` can use.
+    /// This system has a per-user service manager `afoot` can use.
     pub supported: bool,
     pub installed: bool,
 }
@@ -149,7 +149,7 @@ pub struct Service {
 pub struct Receiver {
     pub endpoint: String,
     pub reachable: bool,
-    /// Why it does not answer, in `af`'s words.
+    /// Why it does not answer, in `afoot`'s words.
     pub note: Option<String>,
 }
 
@@ -166,19 +166,19 @@ pub struct AgentStatus {
     pub name: String,
     /// `receiving`, `needs_restart`, `waiting`, `misconfigured`,
     /// `not_configured`, `not_installed` or `unknown` (a string: a newer
-    /// `af` may add states).
+    /// `afoot` may add states).
     pub state: String,
     pub detail: Option<String>,
     pub action: Option<String>,
 }
 
-// --- `af summary` --------------------------------------------------------------
+// --- `afoot summary` --------------------------------------------------------------
 
-/// `af summary` (the contract is `schemas/summary/v1.schema.json` in the
+/// `afoot summary` (the contract is `schemas/summary/v1.schema.json` in the
 /// agentic-footprint repository). Fields we do not name are ignored.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Summary {
-    pub af_version: String,
+    pub afoot_version: String,
     pub generated_at: String,
     pub period: PeriodInfo,
     pub collector: SummaryCollector,
@@ -278,7 +278,7 @@ pub struct NotEstimated {
     pub tokens: u64,
 }
 
-/// The periods `af summary --period` takes (local calendar days, ending today).
+/// The periods `afoot summary --period` takes (local calendar days, ending today).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 pub enum Period {
     #[serde(rename = "today")]
@@ -301,21 +301,21 @@ impl Period {
 
 // --- Actions -------------------------------------------------------------------
 
-/// The things the user can ask `af` to do from the panel. Each one
+/// The things the user can ask `afoot` to do from the panel. Each one
 /// changes the user's machine: see SECURITY.md for what they write.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
-    /// `af service install`: the per-user service that receives the
+    /// `afoot service install`: the per-user service that receives the
     /// agents' events.
     InstallService,
-    /// `af setup --yes --global`: writes the agents' user configuration
+    /// `afoot setup --yes --global`: writes the agents' user configuration
     /// (`~/.claude/settings.json`, Codex's `config.toml`).
     SetupAgents,
-    /// `af python setup`: `af` builds its own Python environment (in its
+    /// `afoot python setup`: `afoot` builds its own Python environment (in its
     /// state folder) with uv or the system's Python, downloading the
     /// packages its estimates need.
     SetupPython,
-    /// `af self update`: `af` downloads its own latest release from GitHub
+    /// `afoot self update`: `afoot` downloads its own latest release from GitHub
     /// and verifies its Sigstore signature itself.
     SelfUpdate,
 }
@@ -345,16 +345,16 @@ pub struct ActionOutput {
     pub output: String,
 }
 
-// --- Finding and running `af` --------------------------------------------------
+// --- Finding and running `afoot` --------------------------------------------------
 
-/// Where `af` is looked up, and where it runs.
+/// Where `afoot` is looked up, and where it runs.
 #[derive(Debug, Clone, Default)]
 pub struct Env {
     /// The `PATH` variable.
     pub path: Option<OsString>,
     /// The user's home directory.
     pub home: Option<PathBuf>,
-    /// `%LOCALAPPDATA%` (Windows), where `af`'s installer puts it there.
+    /// `%LOCALAPPDATA%` (Windows), where `afoot`'s installer puts it there.
     pub local_app_data: Option<PathBuf>,
 }
 
@@ -368,10 +368,10 @@ impl Env {
     }
 }
 
-/// Where `af`'s own installers put it, and so where "Install af" puts it
+/// Where `afoot`'s own installers put it, and so where "Install afoot" puts it
 /// too: `~/.local/bin` (`install.sh`), or
 /// `%LOCALAPPDATA%\Programs\agentic-footprint` on Windows (`install.ps1`).
-/// One place, whichever way `af` was installed: the terminal and the app
+/// One place, whichever way `afoot` was installed: the terminal and the app
 /// then use the same file.
 pub fn install_dir(env: &Env, windows: bool) -> Option<PathBuf> {
     if windows {
@@ -385,7 +385,7 @@ pub fn install_dir(env: &Env, windows: bool) -> Option<PathBuf> {
     }
 }
 
-/// The `af` to run: the first one in `path`, else in the folders user
+/// The `afoot` to run: the first one in `path`, else in the folders user
 /// tools are installed to ([`user_tool_dirs`]: an app started from the
 /// Dock does not get the shell's `PATH`), else in its installers' folder
 /// ([`install_dir`]).
@@ -420,7 +420,7 @@ fn is_executable(file: &Path) -> bool {
     }
 }
 
-/// A finished `af` process.
+/// A finished `afoot` process.
 struct Finished {
     status: ExitStatus,
     stdout: String,
@@ -434,7 +434,7 @@ enum RunError {
 
 /// Run `program` to its end, or kill it after `timeout`. No stdin; stdout
 /// and stderr are captured. It runs in `cwd` (the home directory), so that
-/// nothing depends on where the app was started from: `af setup` also
+/// nothing depends on where the app was started from: `afoot setup` also
 /// looks at the agent settings of the directory it runs in.
 fn run(
     program: &Path,
@@ -451,7 +451,7 @@ fn run(
     if let Some(cwd) = cwd.filter(|dir| dir.is_dir()) {
         command.current_dir(cwd);
         // An app started from the Dock or a launcher gets a bare PATH,
-        // without the places uv and user tools are installed to; `af` then
+        // without the places uv and user tools are installed to; `afoot` then
         // would not find the uv that is there.
         command.env("PATH", child_path(std::env::var_os("PATH"), cwd));
     }
@@ -463,7 +463,7 @@ fn run(
     }
     #[cfg(unix)]
     {
-        // Its own process group, so that a time-out can stop what `af`
+        // Its own process group, so that a time-out can stop what `afoot`
         // started (uv, pip) along with it.
         use std::os::unix::process::CommandExt;
         command.process_group(0);
@@ -523,8 +523,8 @@ fn kill_tree(child: &mut std::process::Child) {
 }
 
 /// Where user-installed tools usually are, beyond `PATH`: under `home`,
-/// and Homebrew's. One list, for finding `af` and for the `PATH` of the
-/// `af` we start (which looks for uv there).
+/// and Homebrew's. One list, for finding `afoot` and for the `PATH` of the
+/// `afoot` we start (which looks for uv there).
 fn user_tool_dirs(home: Option<&Path>) -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = home
         .iter()
@@ -542,7 +542,7 @@ fn user_tool_dirs(home: Option<&Path>) -> Vec<PathBuf> {
     dirs
 }
 
-/// `path`, then [`user_tool_dirs`], for the `af` we start. Existing
+/// `path`, then [`user_tool_dirs`], for the `afoot` we start. Existing
 /// entries keep their order.
 fn child_path(path: Option<OsString>, home: &Path) -> OsString {
     let mut dirs: Vec<PathBuf> = path
@@ -585,7 +585,7 @@ fn tail(text: &str) -> String {
     text.chars().skip(skip).collect()
 }
 
-/// Run `af` and sort out how it ended; `ok` gets the stdout and stderr of
+/// Run `afoot` and sort out how it ended; `ok` gets the stdout and stderr of
 /// a run that exited with 0.
 fn finish<T>(
     env: &Env,
@@ -593,10 +593,10 @@ fn finish<T>(
     timeout: Duration,
     ok: impl FnOnce(&str, &str) -> Outcome<T>,
 ) -> Outcome<T> {
-    let Some(af) = locate(env) else {
+    let Some(afoot) = locate(env) else {
         return Outcome::NotFound;
     };
-    match run(&af, args, env.home.as_deref(), timeout) {
+    match run(&afoot, args, env.home.as_deref(), timeout) {
         Err(RunError::Spawn(detail)) => Outcome::SpawnFailed { detail },
         Err(RunError::TimedOut) => Outcome::TimedOut {
             seconds: timeout.as_secs(),
@@ -613,7 +613,7 @@ fn finish<T>(
     }
 }
 
-/// Read the JSON document `af` printed. The version is checked before the
+/// Read the JSON document `afoot` printed. The version is checked before the
 /// shape, so a newer protocol is reported as such and not as bad output.
 pub fn parse<T: DeserializeOwned>(stdout: &str) -> Outcome<T> {
     let document: serde_json::Value = match serde_json::from_str(stdout.trim()) {
@@ -653,7 +653,7 @@ fn act_with(env: &Env, args: &[&str], timeout: Duration) -> Outcome<ActionOutput
     })
 }
 
-/// `af summary --period <period> --utc-offset-minutes=<minutes>`.
+/// `afoot summary --period <period> --utc-offset-minutes=<minutes>`.
 fn summary_args(period: Period, utc_offset_minutes: i32) -> [String; 4] {
     [
         "summary".into(),
@@ -675,36 +675,36 @@ async fn blocking<T: Send + 'static>(
         })
 }
 
-/// "Install af": download the pinned release of `af` for this computer,
-/// check it against the hash this app was built with, put it where `af`'s
-/// own installer would ([`install_dir`]), and tell `af` it came from a
-/// release (so that `af self update` manages it from then on): what the
+/// "Install afoot": download the pinned release of `afoot` for this computer,
+/// check it against the hash this app was built with, put it where `afoot`'s
+/// own installer would ([`install_dir`]), and tell `afoot` it came from a
+/// release (so that `afoot self update` manages it from then on): what the
 /// installer does with a release binary. Nothing is installed unless the
 /// download is exactly the pinned file.
 pub async fn install(app: &AppHandle) -> Outcome<ActionOutput> {
-    use crate::af_release;
+    use crate::afoot_release;
 
     let failed = |detail: String| Outcome::Failed {
         exit_code: None,
         detail,
     };
     let (os, arch) = (std::env::consts::OS, std::env::consts::ARCH);
-    let Some(pin) = af_release::pin_for(os, arch) else {
+    let Some(pin) = afoot_release::pin_for(os, arch) else {
         return failed(format!(
-            "there is no af release for this computer ({os} {arch})"
+            "there is no afoot release for this computer ({os} {arch})"
         ));
     };
     let env = Env::of(app);
     let Some(dir) = install_dir(&env, cfg!(windows)) else {
-        return failed("the folder af is installed to cannot be determined".to_string());
+        return failed("the folder afoot is installed to cannot be determined".to_string());
     };
-    log::info!("af: downloading {}", af_release::url(pin.asset));
-    let bytes = match af_release::download(pin).await {
+    log::info!("afoot: downloading {}", afoot_release::url(pin.asset));
+    let bytes = match afoot_release::download(pin).await {
         Ok(bytes) => bytes,
         Err(e) => return failed(format!("the download failed: {e}")),
     };
-    if !af_release::matches(&bytes, pin) {
-        log::warn!("af: {} is not the pinned file", pin.asset);
+    if !afoot_release::matches(&bytes, pin) {
+        log::warn!("afoot: {} is not the pinned file", pin.asset);
         return failed(
             "the downloaded file is not the release this app expects (checksum mismatch): \
              nothing was installed"
@@ -715,7 +715,7 @@ pub async fn install(app: &AppHandle) -> Outcome<ActionOutput> {
         let Some(_one_at_a_time) = claim() else {
             return Outcome::Busy;
         };
-        let binary = match af_release::place(&bytes, &dir) {
+        let binary = match afoot_release::place(&bytes, &dir) {
             Ok(binary) => binary,
             Err(e) => {
                 return Outcome::Failed {
@@ -724,14 +724,18 @@ pub async fn install(app: &AppHandle) -> Outcome<ActionOutput> {
                 }
             }
         };
-        log::info!("af: installed {} {}", af_release::VERSION, binary.display());
+        log::info!(
+            "afoot: installed {} {}",
+            afoot_release::VERSION,
+            binary.display()
+        );
         // Run the file just installed, whatever else is on PATH.
         let binary_text = binary.to_string_lossy().into_owned();
         let args = ["self", "record-install", "--binary", binary_text.as_str()];
         match run(&binary, &args, env.home.as_deref(), ACTION_TIMEOUT) {
             Ok(done) if done.status.success() => Outcome::Ok {
                 data: ActionOutput {
-                    output: format!("af {} installed", af_release::VERSION),
+                    output: format!("afoot {} installed", afoot_release::VERSION),
                 },
             },
             Ok(done) => Outcome::Failed {
@@ -747,13 +751,13 @@ pub async fn install(app: &AppHandle) -> Outcome<ActionOutput> {
     .await
 }
 
-/// `af status`: what is installed, configured and running. Read-only.
+/// `afoot status`: what is installed, configured and running. Read-only.
 pub async fn status(app: &AppHandle) -> Outcome<Status> {
     let env = Env::of(app);
     blocking(move || read_with(&env, &["status"], READ_TIMEOUT)).await
 }
 
-/// `af summary` for `period`, days cut at `utc_offset_minutes` east of UTC
+/// `afoot summary` for `period`, days cut at `utc_offset_minutes` east of UTC
 /// (the panel's own offset, so "today" is the user's today). Read-only.
 pub async fn summary(app: &AppHandle, period: Period, utc_offset_minutes: i32) -> Outcome<Summary> {
     let env = Env::of(app);
@@ -765,11 +769,11 @@ pub async fn summary(app: &AppHandle, period: Period, utc_offset_minutes: i32) -
     .await
 }
 
-/// Run one [`Action`] and return what `af` printed. Called from a button
+/// Run one [`Action`] and return what `afoot` printed. Called from a button
 /// click only.
 pub async fn act(app: &AppHandle, action: Action) -> Outcome<ActionOutput> {
     let env = Env::of(app);
-    log::info!("af: running `af {}`", action.args().join(" "));
+    log::info!("afoot: running `afoot {}`", action.args().join(" "));
     let outcome = blocking(move || {
         let Some(_one_at_a_time) = claim() else {
             return Outcome::Busy;
@@ -778,8 +782,8 @@ pub async fn act(app: &AppHandle, action: Action) -> Outcome<ActionOutput> {
     })
     .await;
     match &outcome {
-        Outcome::Ok { .. } => log::info!("af: `af {}` succeeded", action.args().join(" ")),
-        _ => log::warn!("af: `af {}` did not succeed", action.args().join(" ")),
+        Outcome::Ok { .. } => log::info!("afoot: `afoot {}` succeeded", action.args().join(" ")),
+        _ => log::warn!("afoot: `afoot {}` did not succeed", action.args().join(" ")),
     }
     outcome
 }
@@ -798,13 +802,13 @@ mod tests {
         }
     }
 
-    /// A synthetic `af status` document (no real machine's output).
+    /// A synthetic `afoot status` document (no real machine's output).
     fn status_json() -> serde_json::Value {
         json!({
             "protocol_version": 1,
-            "af_version": "0.1.0",
-            "binary": "/home/someone/.local/bin/af",
-            "state_dir": "/home/someone/.local/state/af",
+            "afoot_version": "0.1.0",
+            "binary": "/home/someone/.local/bin/afoot",
+            "state_dir": "/home/someone/.local/state/afoot",
             "self_update": {"managed": true},
             "service": {"supported": true, "installed": false},
             "receiver": {
@@ -819,7 +823,7 @@ mod tests {
                     "name": "Claude Code",
                     "state": "not_configured",
                     "detail": "no OTLP endpoint in the user settings",
-                    "action": "run af setup",
+                    "action": "run afoot setup",
                     "sessions": 0,
                     "processes": [{"pid": 1, "cwd": "/home/someone/project"}]
                 },
@@ -849,7 +853,7 @@ mod tests {
         })
     }
 
-    /// A synthetic `af summary` document following the v1 schema.
+    /// A synthetic `afoot summary` document following the v1 schema.
     fn summary_json() -> serde_json::Value {
         let with = |extra: serde_json::Value, figures: serde_json::Value| {
             let mut object = figures;
@@ -860,7 +864,7 @@ mod tests {
         };
         json!({
             "protocol_version": 1,
-            "af_version": "0.1.0",
+            "afoot_version": "0.1.0",
             "generated_at": "2026-03-02T10:00:00.000Z",
             "period": {
                 "name": "7d",
@@ -891,7 +895,7 @@ mod tests {
         let Outcome::Ok { data } = parse::<Status>(&status_json().to_string()) else {
             panic!("not parsed");
         };
-        assert_eq!(data.af_version, "0.1.0");
+        assert_eq!(data.afoot_version, "0.1.0");
         assert!(data.self_update.managed);
         assert!(data.service.supported && !data.service.installed);
         assert_eq!(data.receiver.note.as_deref(), Some("connection refused"));
@@ -933,7 +937,7 @@ mod tests {
         assert_eq!(data.models_not_estimated[0].tokens, 200);
         assert_eq!(data.by_day[0].date, "2026-03-02");
         assert_eq!(data.period.utc_offset_minutes, -300);
-        // The panel reads the same flat shape `af` printed.
+        // The panel reads the same flat shape `afoot` printed.
         let sent = serde_json::to_value(&data).unwrap();
         assert_eq!(sent["by_agent"][0]["tokens"]["total"], 1000);
         assert_eq!(sent["by_day"][0]["calls"], 10);
@@ -956,14 +960,14 @@ mod tests {
 
     #[test]
     fn output_that_is_not_the_document_is_invalid() {
-        for text in ["", "af 0.1.0", "<html>", "{\"protocol_version\": 1"] {
+        for text in ["", "afoot 0.1.0", "<html>", "{\"protocol_version\": 1"] {
             assert!(
                 matches!(parse::<Status>(text), Outcome::InvalidOutput { .. }),
                 "{text:?}"
             );
         }
-        // The right version, but not the shape of `af status`.
-        let wrong_shape = json!({"protocol_version": 1, "af_version": 7});
+        // The right version, but not the shape of `afoot status`.
+        let wrong_shape = json!({"protocol_version": 1, "afoot_version": 7});
         assert!(matches!(
             parse::<Status>(&wrong_shape.to_string()),
             Outcome::InvalidOutput { .. }
@@ -1079,33 +1083,36 @@ mod tests {
         assert_eq!(locate(&Env::default()), None);
     }
 
-    /// For developers: `cargo test -- --ignored real_af` reads the `af`
+    /// For developers: `cargo test -- --ignored real_afoot` reads the `afoot`
     /// installed on this machine (both commands are read-only) and prints
     /// nothing of what it says.
     #[test]
-    #[ignore = "needs af on this machine"]
-    fn real_af_answers_in_the_shape_we_read() {
+    #[ignore = "needs afoot on this machine"]
+    fn real_afoot_answers_in_the_shape_we_read() {
         let env = Env {
             path: std::env::var_os("PATH"),
             home: std::env::var_os("HOME").map(PathBuf::from),
             local_app_data: None,
         };
-        assert!(locate(&env).is_some(), "af is not installed here");
+        assert!(locate(&env).is_some(), "afoot is not installed here");
         let status = read_with::<Status>(&env, &["status"], READ_TIMEOUT);
-        assert!(matches!(status, Outcome::Ok { .. }), "af status");
+        assert!(matches!(status, Outcome::Ok { .. }), "afoot status");
         for period in [Period::Today, Period::Days7, Period::Days30] {
             for offset in [-300, 0, 60] {
                 let args = summary_args(period, offset);
                 let args: Vec<&str> = args.iter().map(String::as_str).collect();
                 let summary = read_with::<Summary>(&env, &args, READ_TIMEOUT);
-                assert!(matches!(summary, Outcome::Ok { .. }), "af summary {args:?}");
+                assert!(
+                    matches!(summary, Outcome::Ok { .. }),
+                    "afoot summary {args:?}"
+                );
             }
         }
     }
 
-    /// Fake `af` scripts in a temporary directory.
+    /// Fake `afoot` scripts in a temporary directory.
     #[cfg(unix)]
-    mod with_a_fake_af {
+    mod with_a_fake_afoot {
         use super::*;
         use std::os::unix::fs::PermissionsExt;
         use std::sync::atomic::{AtomicU32, Ordering};
@@ -1118,7 +1125,7 @@ mod tests {
 
         fn temp_dir(name: &str) -> PathBuf {
             let dir = std::env::temp_dir().join(format!(
-                "cc-af-{}-{}-{name}",
+                "cc-afoot-{}-{}-{name}",
                 std::process::id(),
                 NEXT.fetch_add(1, Ordering::Relaxed)
             ));
@@ -1133,11 +1140,11 @@ mod tests {
             std::fs::set_permissions(file, std::fs::Permissions::from_mode(mode)).unwrap();
         }
 
-        /// A directory holding an `af` that runs `body` (sh), as an [`Env`]
+        /// A directory holding an `afoot` that runs `body` (sh), as an [`Env`]
         /// whose `PATH` is that directory alone.
         fn fake(name: &str, body: &str) -> (PathBuf, Env) {
             let dir = temp_dir(name);
-            write(&dir.join("af"), &format!("#!/bin/sh\n{body}\n"), 0o755);
+            write(&dir.join("afoot"), &format!("#!/bin/sh\n{body}\n"), 0o755);
             let env = env_with(dir.as_os_str(), None);
             (dir, env)
         }
@@ -1149,15 +1156,15 @@ mod tests {
             let _guard = SCRIPTS.lock().unwrap_or_else(|e| e.into_inner());
             let dir = temp_dir("locate");
             let (first, second, home) = (dir.join("first"), dir.join("second"), dir.join("home"));
-            let in_home = home.join(".local/bin/af");
+            let in_home = home.join(".local/bin/afoot");
             write(&in_home, "#!/bin/sh\n", 0o755);
             std::fs::create_dir_all(&first).unwrap();
-            write(&second.join("af"), "#!/bin/sh\n", 0o755);
+            write(&second.join("afoot"), "#!/bin/sh\n", 0o755);
 
             let path = std::env::join_paths([&first, &second]).unwrap();
             assert_eq!(
                 locate(&env_with(&path, Some(&home))),
-                Some(second.join("af")),
+                Some(second.join("afoot")),
                 "PATH order, before ~/.local/bin"
             );
             assert_eq!(
@@ -1183,8 +1190,8 @@ mod tests {
             let _guard = SCRIPTS.lock().unwrap_or_else(|e| e.into_inner());
             let dir = temp_dir("exec");
             let (plain, folder) = (dir.join("plain"), dir.join("folder"));
-            write(&plain.join("af"), "#!/bin/sh\n", 0o644);
-            std::fs::create_dir_all(folder.join("af")).unwrap();
+            write(&plain.join("afoot"), "#!/bin/sh\n", 0o644);
+            std::fs::create_dir_all(folder.join("afoot")).unwrap();
             let path = std::env::join_paths([&plain, &folder]).unwrap();
             assert_eq!(
                 locate(&env_with(&path, None)),
@@ -1197,7 +1204,7 @@ mod tests {
         }
 
         #[test]
-        fn reads_the_document_a_working_af_prints() {
+        fn reads_the_document_a_working_afoot_prints() {
             let _guard = SCRIPTS.lock().unwrap_or_else(|e| e.into_inner());
             // Answers `summary --period 7d --utc-offset-minutes=-300` only.
             let body = format!(
@@ -1225,7 +1232,7 @@ mod tests {
         }
 
         #[test]
-        fn a_missing_af_is_not_found() {
+        fn a_missing_afoot_is_not_found() {
             let _guard = SCRIPTS.lock().unwrap_or_else(|e| e.into_inner());
             let dir = temp_dir("missing");
             let env = env_with(dir.as_os_str(), Some(&dir));
@@ -1241,7 +1248,7 @@ mod tests {
         }
 
         #[test]
-        fn a_non_zero_exit_gives_the_code_and_what_af_said() {
+        fn a_non_zero_exit_gives_the_code_and_what_afoot_said() {
             let _guard = SCRIPTS.lock().unwrap_or_else(|e| e.into_inner());
             let (dir, env) = fake(
                 "exit",
@@ -1270,7 +1277,7 @@ mod tests {
         #[test]
         fn output_that_is_not_json_is_invalid() {
             let _guard = SCRIPTS.lock().unwrap_or_else(|e| e.into_inner());
-            let (dir, env) = fake("text", "echo 'Usage: af <COMMAND>'");
+            let (dir, env) = fake("text", "echo 'Usage: afoot <COMMAND>'");
             assert!(matches!(
                 read_with::<Status>(&env, &["status"], SHORT),
                 Outcome::InvalidOutput { .. }
@@ -1283,7 +1290,7 @@ mod tests {
             let _guard = SCRIPTS.lock().unwrap_or_else(|e| e.into_inner());
             let (dir, env) = fake(
                 "protocol",
-                "echo '{\"protocol_version\": 2, \"af_version\": \"9.0.0\"}'",
+                "echo '{\"protocol_version\": 2, \"afoot_version\": \"9.0.0\"}'",
             );
             assert_eq!(
                 read_with::<Status>(&env, &["status"], SHORT),
@@ -1296,12 +1303,12 @@ mod tests {
         }
 
         #[test]
-        fn a_time_out_also_stops_what_af_started() {
+        fn a_time_out_also_stops_what_afoot_started() {
             let _guard = SCRIPTS.lock().unwrap_or_else(|e| e.into_inner());
             let dir = temp_dir("tree");
             let pid_file = dir.join("grandchild.pid");
             let body = format!("sleep 30 &\necho $! > '{}'\nwait", pid_file.display());
-            write(&dir.join("af"), &format!("#!/bin/sh\n{body}\n"), 0o755);
+            write(&dir.join("afoot"), &format!("#!/bin/sh\n{body}\n"), 0o755);
             let env = env_with(dir.as_os_str(), None);
             assert_eq!(
                 read_with::<Status>(&env, &["status"], Duration::from_millis(500)),
@@ -1320,23 +1327,23 @@ mod tests {
             while alive() && Instant::now() < deadline {
                 std::thread::sleep(Duration::from_millis(20));
             }
-            assert!(!alive(), "the process af started is still running");
+            assert!(!alive(), "the process afoot started is still running");
             let _ = std::fs::remove_dir_all(dir);
         }
 
         #[test]
-        fn af_is_found_where_user_tools_are_installed_when_path_is_bare() {
+        fn afoot_is_found_where_user_tools_are_installed_when_path_is_bare() {
             let _guard = SCRIPTS.lock().unwrap_or_else(|e| e.into_inner());
             let home = temp_dir("bare-path");
             let cargo_bin = home.join(".cargo").join("bin");
             std::fs::create_dir_all(&cargo_bin).unwrap();
-            write(&cargo_bin.join("af"), "#!/bin/sh\n", 0o755);
+            write(&cargo_bin.join("afoot"), "#!/bin/sh\n", 0o755);
             let env = Env {
                 path: Some("/usr/bin:/bin".into()),
                 home: Some(home.clone()),
                 local_app_data: None,
             };
-            assert_eq!(locate(&env), Some(cargo_bin.join("af")));
+            assert_eq!(locate(&env), Some(cargo_bin.join("afoot")));
             let _ = std::fs::remove_dir_all(home);
         }
 
@@ -1349,7 +1356,7 @@ mod tests {
         }
 
         #[test]
-        fn a_hung_af_is_killed_at_the_time_out() {
+        fn a_hung_afoot_is_killed_at_the_time_out() {
             let _guard = SCRIPTS.lock().unwrap_or_else(|e| e.into_inner());
             let (dir, env) = fake("hang", "exec sleep 30");
             let started = Instant::now();
@@ -1368,7 +1375,7 @@ mod tests {
         fn a_file_that_cannot_be_started_is_a_spawn_failure() {
             let _guard = SCRIPTS.lock().unwrap_or_else(|e| e.into_inner());
             let dir = temp_dir("spawn");
-            write(&dir.join("af"), "#!/nonexistent/interpreter\n", 0o755);
+            write(&dir.join("afoot"), "#!/nonexistent/interpreter\n", 0o755);
             let env = env_with(dir.as_os_str(), None);
             assert!(matches!(
                 read_with::<Status>(&env, &["status"], SHORT),
@@ -1378,7 +1385,7 @@ mod tests {
         }
 
         #[test]
-        fn an_action_returns_what_af_printed() {
+        fn an_action_returns_what_afoot_printed() {
             let _guard = SCRIPTS.lock().unwrap_or_else(|e| e.into_inner());
             let (dir, env) = fake(
                 "action",
@@ -1404,7 +1411,7 @@ mod tests {
         }
 
         #[test]
-        fn af_runs_in_the_home_directory() {
+        fn afoot_runs_in_the_home_directory() {
             let _guard = SCRIPTS.lock().unwrap_or_else(|e| e.into_inner());
             let (dir, mut env) = fake("cwd", "pwd");
             let home = dir.join("home");
@@ -1437,7 +1444,7 @@ mod tests {
         }
     }
     #[test]
-    fn af_is_installed_where_its_own_installers_put_it() {
+    fn afoot_is_installed_where_its_own_installers_put_it() {
         let env = Env {
             path: None,
             home: Some(PathBuf::from("/home/ann")),

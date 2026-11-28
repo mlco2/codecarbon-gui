@@ -1,32 +1,32 @@
 /**
  * Agents: the tokens your coding agents used and an estimate of the impact
- * of the remote inference, read from the `af` CLI by Rust (`af_status`,
- * `af_summary`; af.rs). What to show and how to word it is decided in
+ * of the remote inference, read from the `afoot` CLI by Rust (`afoot_status`,
+ * `afoot_summary`; afoot.rs). What to show and how to word it is decided in
  * agents.ts; this file builds the DOM.
  *
- * `af` runs only while this view is on screen: once when it opens, then
+ * `afoot` runs only while this view is on screen: once when it opens, then
  * the summary every 30 s. The three buttons that change the machine
- * (install the service, configure the agents, update af) run on a click.
+ * (install the service, configure the agents, update afoot) run on a click.
  */
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
-  afInstall,
-  afInstallService,
-  afSetupAgents,
-  afSetupPython,
-  afStatus,
-  afSummary,
+  afootInstall,
+  afootInstallService,
+  afootSetupAgents,
+  afootSetupPython,
+  afootStatus,
+  afootSummary,
   errorMessage,
   openUrl,
-  type AfActionOutput,
-  type AfFigures,
-  type AfOutcome,
-  type AfPeriod,
-  type AfStatus,
-  type AfSummary,
+  type AfootActionOutput,
+  type AfootFigures,
+  type AfootOutcome,
+  type AfootPeriod,
+  type AfootStatus,
+  type AfootSummary,
 } from "../api";
 import {
-  AF_URL,
+  AFOOT_URL,
   agentStateLabel,
   count,
   coverage,
@@ -55,7 +55,7 @@ import { live, liveAttr, n, t, type MessageKey } from "../i18n/i18n";
 /** The summary is read again this often while the view is on screen. */
 const REFRESH_MS = 30_000;
 
-const PERIODS: [AfPeriod, MessageKey][] = [
+const PERIODS: [AfootPeriod, MessageKey][] = [
   ["today", "agents.period.today"],
   ["7d", "agents.period.7d"],
   ["30d", "agents.period.30d"],
@@ -66,11 +66,11 @@ const BARS_H = 72;
 const TICKS_H = 16;
 
 type ActionName = "install" | "service" | "setup" | "python";
-const ACTIONS: Record<ActionName, () => Promise<AfOutcome<AfActionOutput>>> = {
-  install: afInstall,
-  service: afInstallService,
-  setup: afSetupAgents,
-  python: afSetupPython,
+const ACTIONS: Record<ActionName, () => Promise<AfootOutcome<AfootActionOutput>>> = {
+  install: afootInstall,
+  service: afootInstallService,
+  setup: afootSetupAgents,
+  python: afootSetupPython,
 };
 
 /** The panel window is on screen (it is hidden, not closed, when dismissed). */
@@ -84,7 +84,7 @@ async function panelVisible(): Promise<boolean> {
 }
 
 /** A row of a "By agent" / "By model" list. */
-function figuresRow(name: string, sub: string | null, f: AfFigures, total: number): HTMLElement {
+function figuresRow(name: string, sub: string | null, f: AfootFigures, total: number): HTMLElement {
   const part = share(f.tokens.total, total);
   const fill = h("span", { class: "share-fill" });
   fill.style.width = `${Math.max(part * 100, part > 0 ? 1 : 0)}%`;
@@ -118,20 +118,20 @@ function figuresRow(name: string, sub: string | null, f: AfFigures, total: numbe
 export class AgentsView {
   readonly root: HTMLElement;
 
-  private period: AfPeriod = "today";
-  private status: AfOutcome<AfStatus> | null = null;
-  private summary: AfOutcome<AfSummary> | null = null;
+  private period: AfootPeriod = "today";
+  private status: AfootOutcome<AfootStatus> | null = null;
+  private summary: AfootOutcome<AfootSummary> | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   /** Ignore the answer of a load that a newer one overtook. */
   private loadSeq = 0;
   /** The action in progress, and the result of the last one. */
   private running: ActionName | null = null;
-  private lastAction: AfOutcome<AfActionOutput> | null = null;
-  /** Kept across the 30 s re-renders: "what af printed" is open, and why a link did not open. */
+  private lastAction: AfootOutcome<AfootActionOutput> | null = null;
+  /** Kept across the 30 s re-renders: "what afoot printed" is open, and why a link did not open. */
   private outputOpen = false;
   private linkError: string | null = null;
 
-  private readonly periodButtons = new Map<AfPeriod, HTMLButtonElement>();
+  private readonly periodButtons = new Map<AfootPeriod, HTMLButtonElement>();
   private readonly body = h("div", { class: "view" });
 
   constructor() {
@@ -188,7 +188,7 @@ export class AgentsView {
     this.render();
   }
 
-  private setPeriod(period: AfPeriod): void {
+  private setPeriod(period: AfootPeriod): void {
     if (period === this.period) return;
     this.period = period;
     // The previous period stays on screen until the new one answers.
@@ -200,8 +200,8 @@ export class AgentsView {
   private async load(withStatus: boolean): Promise<void> {
     const seq = ++this.loadSeq;
     const [status, summary] = await Promise.all([
-      this.status && !statusIsDue(this.status, withStatus) ? this.status : settled(afStatus()),
-      settled(afSummary(this.period, utcOffsetMinutes())),
+      this.status && !statusIsDue(this.status, withStatus) ? this.status : settled(afootStatus()),
+      settled(afootSummary(this.period, utcOffsetMinutes())),
     ]);
     if (seq !== this.loadSeq) return;
     this.status = status;
@@ -209,7 +209,7 @@ export class AgentsView {
     this.render();
   }
 
-  /** A button was clicked: run `af`, show what it said, read everything again. */
+  /** A button was clicked: run `afoot`, show what it said, read everything again. */
   private async act(action: ActionName): Promise<void> {
     if (this.running) return;
     this.running = action;
@@ -271,7 +271,7 @@ export class AgentsView {
     }
   }
 
-  // --- `af` did not answer -------------------------------------------------------
+  // --- `afoot` did not answer -------------------------------------------------------
 
   private problemCard(p: Problem): HTMLElement {
     const again = h(
@@ -288,12 +288,12 @@ export class AgentsView {
     const message = this.linkMessage();
     const link = h(
       "a",
-      { href: AF_URL, class: "link", "data-focus": "install-link" },
+      { href: AFOOT_URL, class: "link", "data-focus": "install-link" },
       t("agents.install_link"),
     );
     link.addEventListener("click", (e) => {
       e.preventDefault();
-      this.open(AF_URL, message);
+      this.open(AFOOT_URL, message);
     });
     const title =
       p.kind === "not_found"
@@ -307,9 +307,9 @@ export class AgentsView {
       h("div", { class: "card-head" }, h("span", {}, title)),
       p.kind === "not_found"
         ? h("p", {}, t("agents.not_found_body"))
-        : h("p", { class: p.kind === "failed" ? "af-reason" : "" }, p.text),
+        : h("p", { class: p.kind === "failed" ? "afoot-reason" : "" }, p.text),
       p.kind === "not_found"
-        ? this.actionButton("install", "agents.install_af", "agents.install_af_hint")
+        ? this.actionButton("install", "agents.install_afoot", "agents.install_afoot_hint")
         : null,
       // Why an install that was just tried did not work.
       p.kind === "not_found" ? this.actionResult() : null,
@@ -427,7 +427,7 @@ export class AgentsView {
     });
   }
 
-  /** "Done." or why not, and what `af` printed. */
+  /** "Done." or why not, and what `afoot` printed. */
   private actionResult(): HTMLElement | null {
     if (this.running) {
       return h("p", { class: "muted small", role: "status" }, t("agents.action_running"));
@@ -448,13 +448,13 @@ export class AgentsView {
     );
   }
 
-  /** What `af` printed; stays open across re-renders while it is being read. */
+  /** What `afoot` printed; stays open across re-renders while it is being read. */
   private outputDetails(output: string): HTMLElement {
     const details = h(
       "details",
       { class: "small", open: this.outputOpen },
       h("summary", { "data-focus": "output" }, t("agents.action_output")),
-      h("pre", { class: "af-output" }, output),
+      h("pre", { class: "afoot-output" }, output),
     );
     details.addEventListener("toggle", () => {
       this.outputOpen = details.open;
@@ -464,7 +464,7 @@ export class AgentsView {
 
   // --- The numbers ---------------------------------------------------------------
 
-  private dataCards(summary: AfSummary): HTMLElement[] {
+  private dataCards(summary: AfootSummary): HTMLElement[] {
     const { totals } = summary;
     const split = tokenSplit(totals.tokens);
 
@@ -603,7 +603,7 @@ export class AgentsView {
     return cards;
   }
 
-  private dayChart(summary: AfSummary): HTMLElement {
+  private dayChart(summary: AfootSummary): HTMLElement {
     const days = summary.by_day;
     const { bars, max } = barChart(
       days.map((d) => d.tokens.total),

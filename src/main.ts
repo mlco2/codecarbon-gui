@@ -94,7 +94,7 @@ function select(view: View): void {
   }
   if (view === "settings") void settings.load();
   if (view === "history") void history.load();
-  // `af` is only run while its view is on screen.
+  // `afoot` is only run while its view is on screen.
   agents.setActive(view === "agents");
   main.scrollTop = 0;
 }

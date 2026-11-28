@@ -82,7 +82,7 @@ describe("message tables", () => {
       "agents.sessions_one",
       "agents.sessions_other",
       "agents.co2_value",
-      "settings.af_version",
+      "settings.afoot_version",
     ]);
     for (const key of Object.keys(en) as (keyof typeof en)[]) {
       if (!same.has(key)) expect(fr[key], key).not.toBe(en[key]);

@@ -39,8 +39,8 @@ frozen Python program, `codecarbon-agent`, which drives the real CodeCarbon
 library. The numbers you see are exactly the ones the Python package computes.
 Read [docs/DESIGN.md](docs/DESIGN.md) for the architecture and the reasoning,
 and [docs/PROTOCOL.md](docs/PROTOCOL.md) for the way the two halves talk.
-[docs/AF.md](docs/AF.md) describes how the Agents view reads coding-agent
-usage from `af`.
+[docs/AFOOT.md](docs/AFOOT.md) describes how the Agents view reads coding-agent
+usage from `afoot`.
 
 ## Developing
 
