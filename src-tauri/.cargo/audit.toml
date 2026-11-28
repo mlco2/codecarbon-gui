@@ -1,0 +1,14 @@
+# cargo audit configuration (read by `cargo audit`, run from src-tauri in
+# .github/workflows/security.yml).
+
+[advisories]
+ignore = [
+    # cookie 0.18.2: private cookie nonces can repeat in processes that fork.
+    # The flaw is in cookie's private (encrypted) cookies, behind its
+    # `private` feature. Tauri, the only crate that pulls cookie in, builds
+    # it with default features only, so that code is not in the app.
+    # The fix, cookie 0.18.3, was released 2026-11-23; under the 7-day
+    # dependency cooldown, bump it on or after 2026-11-30
+    # (`cargo update -p cookie --precise 0.18.3`) and remove this entry.
+    "RUSTSEC-2026-0594",
+]
