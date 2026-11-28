@@ -31,6 +31,28 @@ not run at once but offered as buttons in the view.
 To pin a newer release, change `VERSION` and the four hashes (from the
 release's `SHA256SUMS`); the tests check their form.
 
+## Moving from `af` (agentic-footprint 0.1.0)
+
+Until agentic-footprint 0.1.1 the command was called `af`, and earlier builds
+of this app installed and ran it. 0.1.1 renamed it to `afoot` with no alias:
+the app no longer looks for `af`, and `afoot` does not recognise what `af`
+installed (its background service, its Claude Code hooks). An `af` install
+left in place keeps its service running and its hooks firing next to
+`afoot`'s, so remove it first:
+
+1. Download the cleanup script attached to the
+   [v0.1.1 release](https://github.com/mlco2/agentic-footprint/releases/tag/v0.1.1):
+   `remove-af.sh` on macOS and Linux, `remove-af.ps1` on Windows.
+2. Run it with `--dry-run` (`-DryRun` on Windows) to see what it would
+   remove, then without. It stops and removes `af`'s service, its Claude
+   Code hooks (after backing up `settings.json`), the OpenCode and Pi
+   plugin files and the `af` binary. The recorded history (`state.db`,
+   `spool/`) is kept, and `afoot` reads it again; `--purge` (`-Purge`)
+   deletes it as well.
+3. Restart the coding agents, then use *Install afoot* in the *Agents* view
+   and the buttons it offers next (Python runtime, background service, agent
+   configuration).
+
 ## Commands the app runs
 
 | Command | When | Changes the computer |
